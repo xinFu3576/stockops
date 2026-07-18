@@ -1,5 +1,5 @@
 .PHONY: help daily test verify status paper-status paper-reset install clean pack
-VERSION ?= 0.13.0
+VERSION ?= 0.14.0
 PY := ./.venv/bin/python
 
 help:

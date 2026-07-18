@@ -398,3 +398,84 @@ def _diff_positions_vs_orders(positions: dict, orders: list) -> list[dict]:
             "target_qty": s.get("qty", 0), "delta": diff,
         })
     return rows
+
+
+def to_json_summary(out: dict) -> dict:
+    """把 run_advise 输出转 JSON 可序列化摘要 (供 --json / API 消费)。"""
+    from datetime import date, datetime
+    orders = []
+    for o in out.get("orders") or []:
+        orders.append({
+            "ticker": o.ticker, "side": o.side, "qty": o.qty,
+            "price": o.price, "order_type": o.order_type, "tag": o.tag,
+        })
+    decisions = []
+    for st in out.get("states") or []:
+        dec = st.decision
+        if dec is None:
+            decisions.append({"ticker": st.ticker, "error": "decision missing"})
+            continue
+        decisions.append({
+            "ticker": st.ticker,
+            "as_of": dec.as_of.isoformat() if hasattr(dec.as_of, "isoformat") else str(dec.as_of),
+            "direction": dec.direction.value,
+            "score": dec.score,
+            "confidence": dec.confidence,
+            "entry_price": dec.entry_price,
+            "stop_loss": dec.stop_loss,
+            "take_profit": dec.take_profit,
+            "horizon_days": dec.horizon_days,
+            "key_points": dec.key_points,
+            "risks": dec.risks,
+            "catalysts": dec.catalysts,
+            "used_analysts": dec.used_analysts,
+        })
+    return {
+        "orders": orders,
+        "decisions": decisions,
+        "portfolio_adjust": {
+            "adjusted": (out.get("portfolio_adjust") or {}).get("adjusted", {}),
+            "violations": (out.get("portfolio_adjust") or {}).get("violations", []),
+            "industry_weights": (out.get("portfolio_adjust") or {}).get("industry_weights", {}),
+        } if out.get("portfolio_adjust") else None,
+        "t1_violations": out.get("t1_violations") or {},
+        "overview": out.get("overview"),
+        "backtest": out.get("backtest") or [],
+        "paper_diff": out.get("paper_diff"),
+    }
+
+
+async def execute_advise_orders(orders: list, portfolio_adjust: dict | None = None,
+                                skip_t1_violations: bool = True) -> dict:
+    """把 advise 建议下到 paper broker。返回每单结果。"""
+    from tools.brokers.paper import PaperBroker
+    from tools.rebalance import is_t_plus_1
+    pb = PaperBroker()
+    results = []
+    # 优先使用 portfolio 调整后的 qty
+    adj_qty = (portfolio_adjust or {}).get("adjusted") or {}
+    for o in orders:
+        qty = adj_qty.get(o.ticker, o.qty)
+        if qty <= 0:
+            results.append({"ticker": o.ticker, "status": "skipped", "reason": "adjusted qty=0"})
+            continue
+        # T+1 违规检查：同日 buy 后 sell 会被拦
+        if skip_t1_violations and o.side == "sell" and is_t_plus_1(o.ticker):
+            lots = await pb.position_open_dates()
+            from datetime import date as _d
+            today = _d.today().isoformat()
+            if any(l.get("date") == today for l in lots.get(o.ticker, [])):
+                results.append({"ticker": o.ticker, "status": "blocked",
+                                "reason": "T+1: 当日买入不能卖出"})
+                continue
+        from core.schemas import Order
+        real = Order(ticker=o.ticker, side=o.side, qty=qty,
+                     price=o.price, order_type=o.order_type or "limit", tag=o.tag or "advise")
+        try:
+            r = await pb.place_order(real)
+            results.append({"ticker": o.ticker, "side": o.side, "qty": qty,
+                            "price": o.price, "status": r.status,
+                            "reason": getattr(r, "reason", None)})
+        except Exception as e:
+            results.append({"ticker": o.ticker, "status": "error", "reason": str(e)[:120]})
+    return {"orders": results, "count": len(results)}

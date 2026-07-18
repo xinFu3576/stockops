@@ -15,6 +15,7 @@ def test_high_alpha_gets_more_weight():
              "fundamental": {"n": 10, "hit_rate": 0.6, "avg_alpha": 0.03},
              "sentiment":   {"n": 10, "hit_rate": 0.4, "avg_alpha": -0.02},
              "macro_event": {"n": 10, "hit_rate": 0.5, "avg_alpha": 0.01},
+             "portfolio_view": {"n": 10, "hit_rate": 0.55, "avg_alpha": 0.02},
          }}
     w = suggest_weights(s)
     assert w["technical"] > w["sentiment"]

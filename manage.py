@@ -279,11 +279,39 @@ def cmd_advise(a):
     ))
     body_md = out["markdown"]
 
-    if a.output_file:
-        pathlib.Path(a.output_file).write_text(body_md, encoding="utf-8")
-        print(f"[advise] 已写入 {a.output_file}")
+    # --json：结构化输出
+    if getattr(a, "json", False):
+        import json as _json
+        from tools.advise_pipeline import to_json_summary
+        summary = to_json_summary(out)
+        payload = _json.dumps(summary, ensure_ascii=False, indent=2, default=str)
+        if a.output_file:
+            pathlib.Path(a.output_file).write_text(payload, encoding="utf-8")
+            print(f"[advise --json] 已写入 {a.output_file}")
+        else:
+            print(payload)
     else:
-        print(body_md)
+        if a.output_file:
+            pathlib.Path(a.output_file).write_text(body_md, encoding="utf-8")
+            print(f"[advise] 已写入 {a.output_file}")
+        else:
+            print(body_md)
+
+    # --execute：一键下到 paper broker
+    if getattr(a, "execute", None) == "paper":
+        if not a.yes:
+            resp = input("确认把以上建议下到 paper broker (y/N)? ").strip().lower()
+            if resp != "y":
+                print("[advise --execute] 已取消")
+                return 0
+        from tools.advise_pipeline import execute_advise_orders
+        exec_res = asyncio.run(execute_advise_orders(
+            out.get("orders", []), out.get("portfolio_adjust"),
+        ))
+        print(f"\n[advise --execute paper] {exec_res.get('count', 0)} 单：")
+        for r in exec_res.get("orders", []):
+            print(f"  {r.get('ticker'):<12s} {r.get('side','-'):<5s} qty={r.get('qty','-')} "
+                  f"@{r.get('price','-')} status={r.get('status')} {r.get('reason','') or ''}")
 
     if a.notify and out["payload_sections"]:
         msg = format_notification(f"交易建议 · {as_of.isoformat()}",
@@ -384,6 +412,9 @@ def main():
     p.add_argument("--with-backtest", action="store_true", help="附加历史回测表")
     p.add_argument("--no-llm", action="store_true", help="跳过 LLM 综合看法")
     p.add_argument("--paper-check", action="store_true", help="附加当前持仓 vs 建议 差")
+    p.add_argument("--json", action="store_true", help="输出结构化 JSON (供上游 agent 消费)")
+    p.add_argument("--execute", choices=["paper"], help="一键把建议下到 paper broker")
+    p.add_argument("--yes", action="store_true", help="配合 --execute，跳过确认")
     p.set_defaults(fn=cmd_advise)
     p = sub.add_parser("backtest-advise", help="对 advise 输出跑历史回测")
     p.add_argument("--tickers", required=True)

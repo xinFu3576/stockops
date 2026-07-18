@@ -685,6 +685,10 @@ class Handler(BaseHTTPRequestHandler):
                               "application/json; charset=utf-8")
         if u.path == "/advise":
             return self._send(200, ADVISE_HTML)
+        if u.path == "/api/notify":
+            data = _notify_sync(parse_qs(u.query))
+            return self._send(200, json.dumps(data, default=str, ensure_ascii=False).encode("utf-8"),
+                              "application/json; charset=utf-8")
         if u.path == "/api/advise":
             data = _advise_sync(parse_qs(u.query))
             return self._send(200, json.dumps(data, default=str, ensure_ascii=False).encode("utf-8"),
@@ -991,11 +995,19 @@ a{color:#58a6ff}
 <input id=eq value=\"100000\" style=width:100px>
 <label><input type=checkbox id=bt> +历史回测</label>
 <label><input type=checkbox id=llm> +LLM 综合</label>
-<button onclick=go()>生成建议</button>
+<button onclick=go()>生成建议</button> <button onclick=push()>推送到微信/飞书</button>
 <span id=st style='color:#8b949e'></span>
 </div>
 <div id=out>请点击「生成建议」...</div>
 <script>
+async function push(){
+  const tk=document.getElementById('tk').value;
+  const eq=document.getElementById('eq').value;
+  document.getElementById('st').textContent='推送中...';
+  const r=await fetch('/api/notify?tickers='+encodeURIComponent(tk)+'&equity='+eq);
+  const j=await r.json();
+  document.getElementById('st').textContent=j.ok?('已推送: '+JSON.stringify(j.channels)):('错误: '+(j.error||''));
+}
 async function go(){
   const tk=document.getElementById('tk').value;
   const eq=document.getElementById('eq').value;

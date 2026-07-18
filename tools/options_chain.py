@@ -220,6 +220,95 @@ def _agg_chain(ticker, source, spot, expiry, opts, *,
     )
 
 
+# ============== Futu OpenD (HK 期权) ==============
+def fetch_futu_hk(ticker: str) -> Optional[OptionsSkew]:
+    """通过 FutuOpenD 本地网关抓 HK 期权链。
+
+    需 FutuOpenD 已启动（默认 127.0.0.1:11111）；pip install futu-api。
+    Env: FUTU_HOST（默认 127.0.0.1）/ FUTU_PORT（默认 11111）。
+    仅 .HK 生效。返回 None 则调用方继续走 proxy 或 iv_skew_proxy 因子。
+    """
+    tk = ticker.upper()
+    if not tk.endswith(".HK"):
+        return None
+    host = os.environ.get("FUTU_HOST", "127.0.0.1")
+    port = int(os.environ.get("FUTU_PORT", "11111"))
+    try:
+        from futu import OpenQuoteContext, RET_OK  # type: ignore
+    except Exception:
+        return None
+    code = tk.replace(".HK", "").zfill(5)
+    hk_code = f"HK.{code}"
+    ctx = OpenQuoteContext(host=host, port=port)
+    try:
+        # 1) spot
+        ret, sq = ctx.get_market_snapshot([hk_code])
+        spot = None
+        if ret == RET_OK and len(sq) > 0:
+            spot = float(sq["last_price"].iloc[0])
+        # 2) 期权到期日
+        ret, expirations = ctx.get_option_expiration_date(hk_code)
+        if ret != RET_OK or expirations is None or len(expirations) == 0:
+            return None
+        # 挑最接近 30 天
+        exps = [str(e) for e in expirations["strike_time"].tolist()]
+        expiry = _pick_near_expiry(exps, target_days=30)
+        if not expiry:
+            expiry = exps[0]
+        # 3) 期权链
+        ret, chain = ctx.get_option_chain(hk_code, start=expiry, end=expiry)
+        if ret != RET_OK or chain is None or len(chain) == 0:
+            return None
+        # 转换成通用结构
+        rows = chain.to_dict(orient="records")
+        opts = []
+        for row in rows:
+            t = row.get("option_type") or ""
+            opts.append({
+                "strike": row.get("strike_price"),
+                "type": "call" if "CALL" in t.upper() else ("put" if "PUT" in t.upper() else t),
+                "iv": row.get("implied_volatility") or row.get("iv"),
+                "oi": row.get("open_interest") or 0,
+                "vol": row.get("volume") or 0,
+            })
+        return _agg_chain(ticker, "futu_hk", spot, expiry, opts,
+                          strike_key="strike", type_key="type",
+                          iv_getter=lambda o: o.get("iv"),
+                          oi_key="oi", vol_key="vol",
+                          type_call="call", type_put="put")
+    except Exception as e:
+        return None
+    finally:
+        try: ctx.close()
+        except Exception: pass
+
+
+# ============== aastocks HK 期权（简易 HTML 解析） ==============
+def fetch_aastocks_hk(ticker: str) -> Optional[OptionsSkew]:
+    """HK 期权兜底：aastocks.com Options Snapshot。只解析总量 P/C，无 IV skew。"""
+    tk = ticker.upper()
+    if not tk.endswith(".HK"): return None
+    code = tk.replace(".HK", "").lstrip("0") or "0"
+    url = f"https://www.aastocks.com/en/stocks/analysis/tools/options-summary/basic-info?symbol={code}"
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        r = urllib.request.urlopen(req, context=_CTX, timeout=8)
+        html = r.read().decode("utf-8", errors="ignore")
+        # 极简正则找 P/C ratio 数字
+        import re
+        m = re.search(r"Put[/\\s]*Call.*?(\d+\.\d{2})", html, re.I | re.S)
+        pc = float(m.group(1)) if m else None
+        if pc is None:
+            return None
+        return OptionsSkew(
+            ticker=ticker, source="aastocks_hk",
+            put_call_ratio=pc, n_contracts=0,
+        )
+    except Exception:
+        return None
+
+
 def fetch_options_skew(ticker: str, force_refresh: bool = False) -> Optional[OptionsSkew]:
     """三级降级：Tradier → Polygon → None(caller 用 proxy)。
     双层缓存：内存 5min + 磁盘 1h（data/options_cache/{ticker}.json）。"""
@@ -234,7 +323,11 @@ def fetch_options_skew(ticker: str, force_refresh: bool = False) -> Optional[Opt
             data = {k: v for k, v in disk.items() if k != "_ts"}
             _CACHE[key] = (now, data)
             return OptionsSkew(**data) if data else None
-    for fn in (fetch_tradier, fetch_polygon):
+    # HK 优先走 futu / aastocks
+    is_hk = ticker.upper().endswith(".HK")
+    chain_fns = ((fetch_futu_hk, fetch_aastocks_hk, fetch_tradier, fetch_polygon)
+                 if is_hk else (fetch_tradier, fetch_polygon))
+    for fn in chain_fns:
         r = fn(ticker)
         if r and (r.iv_skew is not None or r.put_call_ratio is not None):
             d = r.__dict__.copy()
@@ -259,6 +352,12 @@ def health() -> dict:
     r = {}
     r["tradier"] = "ok" if os.environ.get("TRADIER_API_KEY") else "no_key"
     r["polygon"] = "ok" if os.environ.get("POLYGON_API_KEY") else "no_key"
+    try:
+        import futu  # noqa
+        r["futu_hk"] = "ok_lib"
+    except Exception:
+        r["futu_hk"] = "no_lib"
+    r["aastocks_hk"] = "http_probe"
     return r
 
 
