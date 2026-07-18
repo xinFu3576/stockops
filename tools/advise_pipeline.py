@@ -194,7 +194,7 @@ def backtest_advise(states):
     return rows
 
 
-async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=True):
+async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=True, paper_check=False):
     """异步核心：跑 states → orders → portfolio → LLM 综合 → markdown。"""
     from tools.rebalance import is_t_plus_1, estimate_cost
     from tools.options_chain import fetch_options_skew
@@ -361,3 +361,40 @@ async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=Tru
         "overview": overview,
         "backtest": bt_rows,
     }
+
+
+async def _paper_position_snapshot(tickers: list[str]):
+    """从 paper broker 拿当前持仓 & 现金。"""
+    try:
+        from tools.brokers.paper import PaperBroker
+        pb = PaperBroker()
+        pos = await pb.positions()
+        cash = await pb.cash()
+    except Exception as e:
+        return {"error": str(e)}
+    subset = {tk: pos[tk] for tk in tickers if tk in pos}
+    return {"positions": subset, "cash": cash, "other_positions": {k: v for k, v in pos.items() if k not in tickers}}
+
+
+def _diff_positions_vs_orders(positions: dict, orders: list) -> list[dict]:
+    """把每个 ticker 的 current qty 和 suggested qty (from orders) 对齐。"""
+    from collections import defaultdict
+    sug = defaultdict(lambda: {"qty": 0, "side": "-"})
+    for o in orders:
+        sug[o.ticker]["qty"] = o.qty
+        sug[o.ticker]["side"] = o.side
+    all_tk = set(positions.keys()) | set(sug.keys())
+    rows = []
+    for tk in sorted(all_tk):
+        cur = positions.get(tk, {}).get("qty", 0)
+        s = sug.get(tk) or {"qty": 0, "side": "-"}
+        diff = 0
+        if s["side"] == "buy":
+            diff = s["qty"]         # add
+        elif s["side"] == "sell":
+            diff = -min(cur, s["qty"])
+        rows.append({
+            "ticker": tk, "current": cur, "action": s.get("side", "-"),
+            "target_qty": s.get("qty", 0), "delta": diff,
+        })
+    return rows

@@ -95,7 +95,7 @@ class FactorBundle(BaseModel):
 
 
 class AnalystVerdict(BaseModel):
-    analyst: Literal["fundamental", "technical", "sentiment", "macro_event"]
+    analyst: Literal["fundamental", "technical", "sentiment", "macro_event", "portfolio_view"]
     direction: Direction
     confidence: float = Field(ge=0.0, le=1.0)
     key_points: list[str]

@@ -1,11 +1,11 @@
 {
   "ticker": "600519.SS",
-  "decision_ts": "2026-07-18T09:33:33.319618",
+  "decision_ts": "2026-07-18T09:42:34.939320",
   "decision": {
     "ticker": "600519.SS",
     "as_of": "2026-07-18",
     "direction": "hold",
-    "score": 52,
+    "score": 51,
     "confidence": 0.48,
     "entry_price": 1253.0,
     "stop_loss": 1197.006,
@@ -19,13 +19,14 @@
       "[sentiment] 舆情 +0.34 覆盖 16 条",
       "[sentiment] 主要话题: 涨价/降价, 产品动态, 机构动作",
       "[macro_event] 宏观 regime: neutral",
-      "[情报] 情绪中性 avg=-0.005 (n=442)"
+      "[portfolio_view] [综合] 舆情正面 +0.34"
     ],
     "risks": [
       "[fundamental] 财务面暂无显著风险，仍需跟踪行业景气",
       "[technical] 技术面无显著风险，需与基本面互证",
       "[sentiment] 情绪指标滞后于价格",
       "[macro_event] 宏观数据缺失，关注 CPI/PPI/PMI",
+      "[portfolio_view] [综合] 综合信号中性，参考单因子分析师意见",
       "模型未覆盖极端事件（黑天鹅/停牌/退市）",
       "数据延迟或缺失可能导致信号失真"
     ],
@@ -34,7 +35,8 @@
       "行业景气度",
       "CPI/PPI",
       "美联储议息",
-      "板块政策"
+      "板块政策",
+      "options 到期日"
     ],
     "checklist": [
       "确认当日为交易日 & 未停牌",
@@ -46,10 +48,12 @@
       "fundamental",
       "technical",
       "sentiment",
-      "macro_event"
+      "macro_event",
+      "portfolio_view"
     ],
     "used_memory_refs": [
-      "600519.SS@2026-07-17"
+      "600519.SS@2026-07-17",
+      "600519.SS@2026-07-18"
     ]
   },
   "realized_return": null,

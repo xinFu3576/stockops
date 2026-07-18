@@ -119,6 +119,7 @@ async def n_analysts(s: AgentState) -> AgentState:
     results = await asyncio.gather(
         analysts.fundamental(s), analysts.technical(s),
         analysts.sentiment(s), analysts.macro_event(s),
+        analysts.portfolio_view(s),
     )
     for v in results:
         s.verdicts[v.analyst] = v

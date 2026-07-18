@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 
 _CACHE: dict[str, tuple[float, dict]] = {}
 _TTL = 300  # 5 分钟内存缓存
-_DISK_TTL = 3600  # 1 小时磁盘缓存
+_DISK_TTL = 1800  # 30 分钟磁盘缓存 (T+0 IV skew 刷新)
 
 from pathlib import Path as _P
 _CACHE_DIR = _P(__file__).resolve().parent.parent / "data" / "options_cache"

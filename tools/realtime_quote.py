@@ -60,11 +60,17 @@ def _fetch_yahoo(ticker: str) -> Optional[Quote]:
 
 
 def _fetch_sina(ticker: str) -> Optional[Quote]:
-    """A 股实时用新浪 hq.sinajs.cn。"""
+    """A 股/港股实时用新浪 hq.sinajs.cn。港股 code 需去前导 0，添加 rt_hk 前缀。"""
     tk = ticker.upper()
-    if not tk.endswith((".SS", ".SH", ".SZ")): return None
+    hk = tk.endswith(".HK")
+    if not tk.endswith((".SS", ".SH", ".SZ", ".HK")): return None
     code = tk.split(".")[0]
-    prefix = "sh" if tk.endswith((".SS",".SH")) else "sz"
+    if hk:
+        code = code.lstrip("0") or "0"
+        code = code.zfill(5)  # 港股用 5 位
+        prefix = "rt_hk"
+    else:
+        prefix = "sh" if tk.endswith((".SS", ".SH")) else "sz"
     url = f"https://hq.sinajs.cn/list={prefix}{code}"
     try:
         req = urllib.request.Request(url, headers={
@@ -75,6 +81,22 @@ def _fetch_sina(ticker: str) -> Optional[Quote]:
         # var hq_str_sh600519="贵州茅台,1650.00,1650.00,...";
         s = raw.split('"')[1] if '"' in raw else ""
         parts = s.split(",")
+        if hk:
+            # var hq_str_rt_hk00700="TENCENT HOLDINGS,TENCENT,466.6,470.4,458.4,462.4,458.4,462.4,7.4,1.59,..."
+            # idx: 3=开盘, 4=昨收(?), 5=最高, 6=最低, 7=最新价, 9=涨幅%
+            if len(parts) < 10: return None
+            price = float(parts[6] or 0)   # 最新价
+            prev = float(parts[3] or 0)    # 昨收
+            high = float(parts[4] or 0)
+            low = float(parts[5] or 0)
+            try: vol = int(float(parts[12])) if len(parts) > 12 else 0
+            except Exception: vol = 0
+            return Quote(
+                ticker=ticker, price=price, source="sina_hk",
+                prev_close=prev, day_high=high, day_low=low, volume=vol,
+                change_pct=(price/prev-1)*100 if prev else None,
+                ts=time.time(),
+            )
         if len(parts) < 6: return None
         price = float(parts[3] or parts[1])   # 3=当前价，1=开盘
         prev = float(parts[2])

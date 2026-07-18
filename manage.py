@@ -275,6 +275,7 @@ def cmd_advise(a):
         tickers, as_of, equity=a.equity,
         include_backtest=bool(getattr(a, "with_backtest", False)),
         use_llm=(not getattr(a, "no_llm", False)),
+        paper_check=bool(getattr(a, "paper_check", False)),
     ))
     body_md = out["markdown"]
 
@@ -382,6 +383,7 @@ def main():
     p.add_argument("--notify", action="store_true", help="推送到 wecom/serverchan/feishu/smtp")
     p.add_argument("--with-backtest", action="store_true", help="附加历史回测表")
     p.add_argument("--no-llm", action="store_true", help="跳过 LLM 综合看法")
+    p.add_argument("--paper-check", action="store_true", help="附加当前持仓 vs 建议 差")
     p.set_defaults(fn=cmd_advise)
     p = sub.add_parser("backtest-advise", help="对 advise 输出跑历史回测")
     p.add_argument("--tickers", required=True)

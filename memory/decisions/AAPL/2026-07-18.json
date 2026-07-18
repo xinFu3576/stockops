@@ -1,6 +1,6 @@
 {
   "ticker": "AAPL",
-  "decision_ts": "2026-07-18T09:33:32.919545",
+  "decision_ts": "2026-07-18T09:42:34.539504",
   "decision": {
     "ticker": "AAPL",
     "as_of": "2026-07-18",
@@ -17,6 +17,7 @@
       "[technical] MA5/MA20=+6.49% 短期上翘",
       "[sentiment] 舆情 +0.00 覆盖 0 条",
       "[macro_event] 宏观 regime: neutral",
+      "[portfolio_view] [综合] options / 微结构因子缺失，转由技术+基本面主导",
       "[情报] 情绪中性 avg=-0.005 (n=442)"
     ],
     "risks": [
@@ -24,6 +25,7 @@
       "[technical] RSI=88.6 超买",
       "[sentiment] 情绪指标滞后于价格",
       "[macro_event] 宏观数据缺失，关注 CPI/PPI/PMI",
+      "[portfolio_view] [综合] 综合信号中性，参考单因子分析师意见",
       "模型未覆盖极端事件（黑天鹅/停牌/退市）",
       "数据延迟或缺失可能导致信号失真"
     ],
@@ -32,7 +34,8 @@
       "行业景气度",
       "CPI/PPI",
       "美联储议息",
-      "板块政策"
+      "板块政策",
+      "options 到期日"
     ],
     "checklist": [
       "确认当日为交易日 & 未停牌",
@@ -44,7 +47,8 @@
       "fundamental",
       "technical",
       "sentiment",
-      "macro_event"
+      "macro_event",
+      "portfolio_view"
     ],
     "used_memory_refs": [
       "AAPL@2026-07-17",

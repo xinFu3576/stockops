@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.12.0",
-  "description": "StockOps v0.12.0 · 实时报价 + 组合层叠加 + LLM 综合看法 + advise 回测 + A股 T+1 open_date 感知",
+  "version": "0.13.0",
+  "description": "StockOps v0.13.0 · portfolio_view 第5位分析师 + advise --paper-check + Dashboard /advise + HK 实时价 + IV skew 30min 刷新",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {

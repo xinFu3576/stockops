@@ -683,6 +683,12 @@ class Handler(BaseHTTPRequestHandler):
             data = _ab_sync(parse_qs(u.query))
             return self._send(200, json.dumps(data, default=str, ensure_ascii=False).encode("utf-8"),
                               "application/json; charset=utf-8")
+        if u.path == "/advise":
+            return self._send(200, ADVISE_HTML)
+        if u.path == "/api/advise":
+            data = _advise_sync(parse_qs(u.query))
+            return self._send(200, json.dumps(data, default=str, ensure_ascii=False).encode("utf-8"),
+                              "application/json; charset=utf-8")
         return self._send(404, "not found", "text/plain")
 
 # ============== A/B 实验对比（v0.9.0） ==============
@@ -943,6 +949,77 @@ def main():
     except KeyboardInterrupt:
         srv.shutdown()
 
+
+
+
+# ============== Advise 一站式看板（v0.13.0） ==============
+def _advise_sync(params: dict) -> dict:
+    import asyncio
+    from datetime import date
+    from tools.advise_pipeline import run_advise
+    tickers = [t.strip() for t in (params.get("tickers", ["AAPL"])[0]).split(",") if t.strip()]
+    equity = float(params.get("equity", ["100000"])[0])
+    as_of = date.today()
+    if params.get("date"):
+        try: as_of = date.fromisoformat(params["date"][0])
+        except Exception: pass
+    include_bt = params.get("bt", ["0"])[0] in ("1", "true", "on")
+    use_llm = params.get("llm", ["0"])[0] in ("1", "true", "on")
+    try:
+        out = asyncio.run(run_advise(tickers, as_of, equity, include_backtest=include_bt, use_llm=use_llm))
+        return {"ok": True, "markdown": out.get("markdown", ""), "overview": out.get("overview")}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
+ADVISE_HTML = """<!doctype html><html><head><meta charset=\"utf-8\"><title>Advise 建议</title>
+<style>
+body{background:#0d1117;color:#e6e6e6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:20px;line-height:1.5}
+input,button{padding:6px 10px;background:#161b22;color:#e6e6e6;border:1px solid #30363d;border-radius:4px;font-size:13px}
+button{cursor:pointer;background:#1f6feb;border:none}
+button:hover{background:#388bfd}
+.wrap{max-width:1200px;margin:auto}
+#out{background:#161b22;padding:16px;border-radius:6px;border:1px solid #30363d;overflow:auto;max-height:75vh}
+#out h1,#out h2{color:#7ee787;border-bottom:1px solid #30363d;padding-bottom:4px}
+#out table{border-collapse:collapse;margin:6px 0}
+#out td,#out th{border:1px solid #30363d;padding:4px 8px}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+a{color:#58a6ff}
+</style></head><body><div class=wrap>
+<div class=row><a href='/'>← 返回</a>
+<input id=tk value=\"600519.SS,AAPL,0700.HK\" style=width:340px>
+<input id=eq value=\"100000\" style=width:100px>
+<label><input type=checkbox id=bt> +历史回测</label>
+<label><input type=checkbox id=llm> +LLM 综合</label>
+<button onclick=go()>生成建议</button>
+<span id=st style='color:#8b949e'></span>
+</div>
+<div id=out>请点击「生成建议」...</div>
+<script>
+async function go(){
+  const tk=document.getElementById('tk').value;
+  const eq=document.getElementById('eq').value;
+  const bt=document.getElementById('bt').checked?1:0;
+  const llm=document.getElementById('llm').checked?1:0;
+  document.getElementById('st').textContent='跑分析师中...';
+  const r=await fetch('/api/advise?tickers='+encodeURIComponent(tk)+'&equity='+eq+'&bt='+bt+'&llm='+llm);
+  const j=await r.json();
+  if(!j.ok){document.getElementById('out').innerHTML='<pre style=color:#f85149>'+(j.error||'unknown')+'</pre>';document.getElementById('st').textContent='错误';return;}
+  document.getElementById('out').innerHTML=render(j.markdown);
+  document.getElementById('st').textContent='完成';
+}
+function render(md){
+  // 极简 md 转 html
+  let h=md.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  h=h.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  h=h.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  h=h.replace(/\\*\\*(.+?)\\*\\*/g,'<b>$1</b>');
+  h=h.replace(/^- (.+)$/gm,'<li>$1</li>');
+  h=h.replace(/\\n\\n/g,'<br>');
+  h=h.replace(/\\n/g,'<br>');
+  return h;
+}
+</script></div></body></html>"""
 
 if __name__ == "__main__":
     main()

@@ -15,7 +15,7 @@ try:
     from tools.adapt import load_weights as _load_weights
     _WEIGHTS = _load_weights()
 except Exception:
-    _WEIGHTS = {"technical": 0.35, "fundamental": 0.30, "sentiment": 0.15, "macro_event": 0.20}
+    _WEIGHTS = {"technical": 0.28, "fundamental": 0.24, "sentiment": 0.14, "macro_event": 0.16, "portfolio_view": 0.18}
 
 
 def _weighted_score(verdicts: dict[str, AnalystVerdict]) -> tuple[float, float]:

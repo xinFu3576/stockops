@@ -150,6 +150,53 @@ def _heuristic_macro_event(state) -> AnalystVerdict:
         catalysts=["CPI/PPI", "美联储议息", "板块政策"], horizon_days=10)
 
 
+def _heuristic_portfolio_view(state) -> AnalystVerdict:
+    """综合视角：options IV skew + 微结构 + 情感 + 因子 → 融合信号。作为第 5 位量化分析师。"""
+    f = _factor_map(state)
+    pts: list[str] = []; risks: list[str] = []; catalysts: list[str] = []; s = 0.0
+    # options IV skew（>0 看跌保护偏贵，市场对下行担忧；<0 看涨溢价，情绪偏亢奋）
+    iv_skew = f.get("iv_skew_25d")
+    if iv_skew is not None:
+        if iv_skew > 0.05:
+            s -= 0.15; risks.append(f"[options] IV skew={iv_skew:+.4f} 显著下行担忧")
+        elif iv_skew < -0.05:
+            s += 0.10; pts.append(f"[options] IV skew={iv_skew:+.4f} 情绪偏亢奋（反向注意）")
+            risks.append("[options] 期权情绪亢奋反过来是短线过热信号")
+        else:
+            pts.append(f"[options] IV skew={iv_skew:+.4f} 中性")
+    pc = f.get("put_call_ratio")
+    if pc is not None:
+        if pc > 1.2:
+            s -= 0.10; risks.append(f"[options] P/C={pc:.2f} 看跌活跃")
+        elif pc < 0.7:
+            s += 0.05; pts.append(f"[options] P/C={pc:.2f} 看涨活跃")
+    # 微结构（成交量放大 vs. 均值）
+    vol_ratio = f.get("vol_ratio_20d")
+    if vol_ratio is not None:
+        if vol_ratio > 1.5:
+            pts.append(f"[微结构] 成交量 {vol_ratio:.2f}x 20 日均量放大")
+            s += 0.05
+        elif vol_ratio < 0.6:
+            pts.append(f"[微结构] 成交量 {vol_ratio:.2f}x 萎缩")
+            s -= 0.03
+    # 情感分（已在 sentiment analyst 里，但这里再交叉印证）
+    if state.sentiment_signal:
+        sg = state.sentiment_signal.score
+        if sg > 0.3: s += 0.08; pts.append(f"[综合] 舆情正面 {sg:+.2f}")
+        elif sg < -0.3: s -= 0.08; risks.append(f"[综合] 舆情负面 {sg:+.2f}")
+    if not risks:
+        risks.append("[综合] 综合信号中性，参考单因子分析师意见")
+    if not pts:
+        pts.append("[综合] options / 微结构因子缺失，转由技术+基本面主导")
+    catalysts.append("options 到期日")
+    catalysts.append("大宗交易/盘后异动")
+    return AnalystVerdict(
+        analyst="portfolio_view",
+        direction=_score_to_direction(s), score=round(s, 3),
+        confidence=round(min(0.9, 0.35 + abs(s)), 2),
+        key_points=pts[:5], risks=risks[:4], catalysts=catalysts[:3], horizon_days=15)
+
+
 # ---------- LLM 上下文渲染 ----------
 def _render_ctx(state, analyst: str) -> str:
     parts = [f"标的={state.ticker} 日期={state.as_of}"]
@@ -166,6 +213,13 @@ def _render_ctx(state, analyst: str) -> str:
             parts.append(f"- [{n.ts.date()}] {n.title[:80]}")
     if analyst == "macro_event" and state.alt_signals:
         parts.append(f"宏观={state.alt_signals.macro_regime} 龙虎榜={state.alt_signals.lhb_net_buy} 大宗={state.alt_signals.block_trade_amount}")
+    if analyst == "portfolio_view":
+        if state.factor_bundle:
+            options = [f for f in state.factor_bundle.factors if f.category in ("options", "microstructure")]
+            if options:
+                parts.append("options+微结构因子: " + ", ".join(f"{f.name}={round(f.value,4)}" for f in options))
+        if state.sentiment_signal:
+            parts.append(f"综合舆情分={state.sentiment_signal.score} 覆盖={state.sentiment_signal.volume}")
     return "\n".join(parts)
 
 
@@ -193,3 +247,5 @@ async def technical(state):   return await _run(state, "technical",   _heuristic
 async def fundamental(state): return await _run(state, "fundamental", _heuristic_fundamental)
 async def sentiment(state):   return await _run(state, "sentiment",   _heuristic_sentiment)
 async def macro_event(state): return await _run(state, "macro_event", _heuristic_macro_event)
+
+async def portfolio_view(state): return await _run(state, "portfolio_view", _heuristic_portfolio_view)
