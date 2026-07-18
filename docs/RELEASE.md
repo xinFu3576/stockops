@@ -47,3 +47,37 @@ cd /path/to/homebrew-stockops
 sed -i "s|v0.6.0/stockops-0.6.0|v0.7.0/stockops-0.7.0|; s|sha256 \"[a-f0-9]*\"|sha256 \"$SHA\"|; s|version \"0.6.0\"|version \"0.7.0\"|" Formula/stockops.rb
 git commit -am "stockops 0.7.0" && git push
 ```
+
+## GitHub Actions Secret 配置（v0.8.0 起 brew tap 自动 bump 依赖）
+
+`release.yml` 在打 tag 时会自动：
+1. 构建 `stockops-<ver>.tar.gz`
+2. 创建 GitHub Release
+3. **可选**：用 `BREW_TAP_TOKEN` push 更新 `homebrew-stockops/Formula/stockops.rb`（sha256 + version + url 三处）
+
+### PAT 生成步骤（fine-grained token 推荐）
+
+1. GitHub → Settings → Developer settings → **Personal access tokens** → **Fine-grained tokens** → Generate new token
+2. Repository access：**Only select repositories** → 勾选 `xinFu3576/homebrew-stockops`
+3. Repository permissions：
+   - Contents：**Read and write**
+   - Metadata：Read-only（默认）
+4. Expiration：建议 90 天，到期前 renew
+5. 复制 token（`github_pat_...`），只显示一次
+
+### 加到当前仓库 secret
+
+1. `xinFu3576/stockops` → Settings → Secrets and variables → Actions → **New repository secret**
+2. Name = `BREW_TAP_TOKEN`
+3. Value = 刚才复制的 PAT
+4. Add secret
+
+### 触发方式
+
+```bash
+git tag -a v0.9.0 -m "v0.9.0"
+git push origin v0.9.0
+# → Actions 里 release.yml 会自动跑，Release + brew tap 同时更新
+```
+
+如果 `BREW_TAP_TOKEN` 未配置，workflow 里的 brew tap 步骤会跳过（`if: env.BREW_TAP_TOKEN != ''`），Release 部分照常创建，需要手动 bump Formula。

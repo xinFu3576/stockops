@@ -1,4 +1,5 @@
 .PHONY: help daily test verify status paper-status paper-reset install clean pack
+VERSION ?= 0.7.0
 PY := ./.venv/bin/python
 
 help:
@@ -9,7 +10,7 @@ help:
 	@echo "make paper-status - paper 账户"
 	@echo "make paper-reset  - 清 paper 账户"
 	@echo "make install      - 创建 venv + pip"
-	@echo "make pack         - 打包 v0.2.0"
+	@echo "make pack         - 打包 tarball (VERSION=0.3.0)"
 
 install:
 	python3 -m venv .venv
@@ -38,10 +39,11 @@ clean:
 	rm -rf .cache __pycache__ */__pycache__ */*/__pycache__ .pytest_cache
 
 pack:
-	cd .. && tar --exclude='stock-agents-team/.venv' --exclude='stock-agents-team/.cache' \
+	cd .. && tar --exclude='stock-agents-team/.venv' \
+	  --exclude='stock-agents-team/.git' --exclude='stock-agents-team/.cache' \
 	  --exclude='stock-agents-team/__pycache__' --exclude='*/__pycache__' \
 	  --exclude='stock-agents-team/data/paper' --exclude='stock-agents-team/data/batch_state' \
 	  --exclude='stock-agents-team/data/price_watch' --exclude='stock-agents-team/reports' \
 	  --exclude='stock-agents-team/.pytest_cache' \
-	  -czf stockops-0.2.0.tar.gz stock-agents-team
-	@ls -lh ../stockops-0.2.0.tar.gz
+	  -czf stockops-$(VERSION).tar.gz stock-agents-team
+	@ls -lh ../stockops-$(VERSION).tar.gz

@@ -54,6 +54,82 @@ def _norm(items: list[dict]) -> list[dict]:
     return out
 
 
+
+
+# ============== 情感打分 (news → sentiment score) ==============
+
+_POS_CN = {"涨":1.0,"利好":1.5,"上调":1.0,"回购":1.2,"分红":0.8,"创新高":1.5,"突破":1.0,
+           "超预期":1.5,"中标":1.0,"扩产":1.0,"增长":1.0,"增持":1.2,"看好":1.0,"受益":0.8,
+           "反弹":0.6,"降息":1.2,"降准":1.2,"减税":1.0,"利率下调":1.2}
+_NEG_CN = {"跌":-1.0,"下跌":-1.0,"下调":-1.0,"利空":-1.5,"减持":-1.2,"亏损":-1.5,"退市":-2.0,
+           "ST":-2.0,"警示":-1.0,"问询":-0.8,"违规":-1.5,"处罚":-1.5,"立案":-2.0,"调查":-1.0,
+           "诉讼":-1.0,"减产":-0.8,"低于预期":-1.2,"承压":-0.6,"加息":-1.2,"暴跌":-2.0,
+           "地震":-0.8,"战争":-1.5,"制裁":-1.5,"衰退":-1.5,"违约":-1.5,"破产":-2.0}
+_POS_EN = {"beat":1.5,"upgrade":1.2,"buyback":1.2,"dividend":0.8,"record high":1.5,
+           "breakthrough":1.0,"outperform":1.2,"rate cut":1.2,"strong":0.8,"acquire":0.6,
+           "surge":1.0,"rally":1.0,"gain":0.6,"raise guidance":1.5,"partnership":0.6}
+_NEG_EN = {"miss":-1.5,"downgrade":-1.2,"sell":-1.0,"loss":-1.5,"cut guidance":-1.5,
+           "recession":-1.5,"lawsuit":-1.0,"investigation":-1.0,"fraud":-2.0,"delisting":-2.0,
+           "sanction":-1.5,"war":-1.5,"crash":-2.0,"plunge":-1.5,"decline":-0.6,
+           "rate hike":-1.2,"default":-1.5,"bankrupt":-2.0}
+
+
+def score_headline(title: str, summary: str = "") -> float:
+    """基于中英双语金融词典对单条 headline 打分,归一化到 [-1, 1]。"""
+    text = (title + " " + (summary or "")).lower()
+    s = 0.0
+    for k, v in _POS_CN.items():
+        if k in text: s += v
+    for k, v in _NEG_CN.items():
+        if k in text: s += v
+    for k, v in _POS_EN.items():
+        if k in text.lower(): s += v
+    for k, v in _NEG_EN.items():
+        if k in text.lower(): s += v
+    # tanh 归一化避免长文本堆叠
+    import math
+    return math.tanh(s / 3.0)
+
+
+def enrich_sentiment(items: list[dict]) -> list[dict]:
+    """给每条 item 附加 sentiment_score + sentiment_label。"""
+    for it in items:
+        sc = score_headline(it.get("title",""), it.get("summary",""))
+        it["sentiment_score"] = round(sc, 3)
+        it["sentiment_label"] = "positive" if sc > 0.15 else ("negative" if sc < -0.15 else "neutral")
+    return items
+
+
+def aggregate_sentiment(items: list[dict], tickers: list[str] | None = None) -> dict:
+    """按 ticker 汇总 sentiment(供 analyst 输入)。"""
+    from collections import defaultdict
+    tks = {t.upper() for t in (tickers or [])}
+    bucket: dict = defaultdict(list)
+    for it in items:
+        sc = it.get("sentiment_score")
+        if sc is None: sc = score_headline(it.get("title",""), it.get("summary",""))
+        # 全市场情绪
+        bucket["_MARKET"].append(sc)
+        for tk in it.get("tickers", []):
+            tku = tk.upper()
+            if not tks or tku in tks:
+                bucket[tku].append(sc)
+    out = {}
+    for k, vs in bucket.items():
+        if not vs: continue
+        avg = sum(vs)/len(vs)
+        # 极端情绪(|score| > 0.5)条数
+        extreme = sum(1 for v in vs if abs(v) > 0.5)
+        out[k] = {
+            "avg": round(avg, 3),
+            "count": len(vs),
+            "extreme_count": extreme,
+            "min": round(min(vs), 3), "max": round(max(vs), 3),
+            "label": "positive" if avg > 0.15 else ("negative" if avg < -0.15 else "neutral"),
+        }
+    return out
+
+
 # ============== 源实现 ==============
 
 async def _rss(client: httpx.AsyncClient, url: str, source: str, tag: str) -> list[dict]:
@@ -200,6 +276,9 @@ async def fetch_all(sources: Optional[list[str]] = None) -> list[dict]:
         "fed": fetch_fed_rss,
         "treasury": fetch_treasury_rss,
         "xinhua": fetch_xinhua,
+        "wallstreetcn": fetch_wallstreetcn,
+        "weibo": fetch_weibo_finance,
+        "x": fetch_x_stub,
     }
     picks = [(k, v) for k, v in registry.items() if not sources or k in sources]
     async with _client() as client:
@@ -213,6 +292,7 @@ async def fetch_all(sources: Optional[list[str]] = None) -> list[dict]:
         stats[name] = len(r or [])
         all_items.extend(r or [])
     all_items = _norm(all_items)
+    all_items = enrich_sentiment(all_items)
     return all_items
 
 
@@ -332,3 +412,100 @@ async def _cli():
 
 if __name__ == "__main__":
     asyncio.run(_cli())
+
+
+# ============== v0.8.0 新增数据源 ==============
+
+async def fetch_wallstreetcn(client: httpx.AsyncClient) -> list[dict]:
+    """华尔街见闻实时快讯 API（免登录 稳定）。"""
+    try:
+        r = await client.get(
+            "https://api-one-wscn.awtmt.com/apiv1/content/lives",
+            params={"channel": "global-channel", "client": "pc", "limit": 40},
+        )
+        r.raise_for_status()
+        data = r.json()
+        items = ((data.get("data") or {}).get("items") or [])
+        out = []
+        for e in items:
+            title = (e.get("title") or e.get("content_text") or "").strip()
+            if not title: continue
+            ts_raw = e.get("display_time") or e.get("created_at")
+            try:
+                dt = datetime.fromtimestamp(int(ts_raw), tz=timezone.utc)
+                ts = dt.isoformat()
+            except Exception:
+                ts = datetime.now(timezone.utc).isoformat()
+            out.append({
+                "title": title[:180],
+                "url": e.get("uri") or "https://wallstreetcn.com/live",
+                "source": "wallstreetcn",
+                "ts": ts,
+                "summary": (e.get("content_text") or "")[:400],
+                "tags": ["market_hot", "global"],
+                "tickers": _extract_a_tickers(title),
+            })
+        return out
+    except Exception:
+        return []
+
+
+async def fetch_weibo_finance(client: httpx.AsyncClient) -> list[dict]:
+    """微博财经热搜 (best-effort)。"""
+    try:
+        r = await client.get(
+            "https://m.weibo.cn/api/container/getIndex",
+            params={"containerid": "231583"},
+            headers={"User-Agent": "Mozilla/5.0", "Referer": "https://m.weibo.cn/"},
+            timeout=10.0,
+        )
+        r.raise_for_status()
+        data = r.json()
+        cards = ((data.get("data") or {}).get("cards") or [])
+        out = []
+        for c in cards:
+            groups = c.get("card_group") or ([c] if c.get("desc") else [])
+            for g in groups:
+                text = (g.get("desc") or g.get("desc1") or "").strip()
+                if not text or len(text) < 4: continue
+                out.append({
+                    "title": text[:180],
+                    "url": g.get("scheme") or "https://m.weibo.cn/",
+                    "source": "weibo_finance",
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "summary": (g.get("desc1") or "")[:200],
+                    "tags": ["social", "cn"],
+                    "tickers": _extract_a_tickers(text),
+                })
+        return out[:40]
+    except Exception:
+        return []
+
+
+async def fetch_x_stub(client: httpx.AsyncClient) -> list[dict]:
+    """X/Twitter via nitter (best-effort，多为降级空返)。"""
+    for mirror in ("https://nitter.privacydev.net", "https://nitter.net"):
+        try:
+            r = await client.get(f"{mirror}/search/rss",
+                                 params={"q": "$SPY OR $QQQ OR Fed OR CPI", "f": "tweets"},
+                                 timeout=8.0)
+            if r.status_code != 200: continue
+            import re
+            txt = r.text
+            titles = re.findall(r"<title><!\[CDATA\[(.+?)\]\]></title>", txt)[1:]
+            links = re.findall(r"<link>(.+?)</link>", txt)[1:]
+            out = []
+            for t, l in zip(titles[:30], links[:30]):
+                out.append({
+                    "title": t[:180],
+                    "url": l,
+                    "source": "x_via_nitter",
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "summary": "",
+                    "tags": ["social", "global"],
+                    "tickers": _extract_a_tickers(t),
+                })
+            if out: return out
+        except Exception:
+            continue
+    return []

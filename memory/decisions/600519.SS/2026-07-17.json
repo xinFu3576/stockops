@@ -1,6 +1,6 @@
 {
   "ticker": "600519.SS",
-  "decision_ts": "2026-07-18T08:33:20.113742",
+  "decision_ts": "2026-07-18T08:40:41.456098",
   "decision": {
     "ticker": "600519.SS",
     "as_of": "2026-07-17",
@@ -18,7 +18,8 @@
       "[technical] MA20/MA60=-5.93% 中期下行",
       "[sentiment] 舆情 +0.38 覆盖 14 条",
       "[sentiment] 主要话题: 涨价/降价, 机构动作, 产品动态",
-      "[macro_event] 宏观 regime: neutral"
+      "[macro_event] 宏观 regime: neutral",
+      "[情报] 情绪中性 avg=-0.007 (n=401)"
     ],
     "risks": [
       "[fundamental] 财务面暂无显著风险，仍需跟踪行业景气",

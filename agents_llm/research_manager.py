@@ -72,6 +72,31 @@ def _heuristic(state) -> Decision:
             used_mem.append(f"{m.decision.ticker}@{m.decision.as_of}")
     risks.append("模型未覆盖极端事件（黑天鹅/停牌/退市）")
     risks.append("数据延迟或缺失可能导致信号失真")
+    # v0.8.0 sentiment closed loop: 注入投资情报聚合
+    try:
+        from tools.investment_news import load_latest, aggregate_sentiment
+        _snap = load_latest()
+        if _snap:
+            _news_items = _snap.get("items", [])
+            _agg = aggregate_sentiment(_news_items, tickers=[state.ticker])
+            _tk_agg = _agg.get(state.ticker.upper()) or _agg.get("_MARKET")
+            if _tk_agg:
+                lbl = _tk_agg.get("label", "neutral")
+                avg = _tk_agg.get("avg", 0.0)
+                n = _tk_agg.get("count", 0)
+                if lbl == "negative" and avg < -0.3:
+                    risks.append(f"[情报] 全网负面情绪 avg={avg} (n={n})，警惕舆情/监管风险")
+                elif lbl == "positive" and avg > 0.3:
+                    key_points.append(f"[情报] 全网正面情绪 avg={avg} (n={n})，短线情绪支撑")
+                else:
+                    key_points.append(f"[情报] 情绪中性 avg={avg} (n={n})")
+                # top 3 headline 提供证据
+                _tk_items = [it for it in _news_items if state.ticker.upper() in [t.upper() for t in it.get("tickers",[])]]
+                for it in sorted(_tk_items, key=lambda x: -abs(x.get("sentiment_score",0)))[:3]:
+                    _lbl = it.get("sentiment_label","?")
+                    catalysts.append(f"[{_lbl}] {it.get('title','')[:80]}")
+    except Exception as _e:
+        pass
     entry, atr = _entry_and_atr(state)
     stop, take = _stop_take(direction, entry, atr)
     score_100 = max(0, min(100, int(round(50 + score * 50))))

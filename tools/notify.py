@@ -64,6 +64,24 @@ def send_smtp(title: str, body: str) -> bool:
 
 
 
+def format_notification(title: str, sections: dict, footer: str = '') -> str:
+    """统一美化的通知模板：emoji 分区 + 汇总。sections dict: 名字→str/list."""
+    _EMOJI = {"决策":"🎯","风险":"⚠️","数据":"📊","情报":"📰","执行":"⚡","账户":"💰","复盘":"🔍"}
+    lines = [f"### 📌 {title}", ""]
+    for name, val in sections.items():
+        emoji = _EMOJI.get(name, "•")
+        lines.append(f"**{emoji} {name}**")
+        if isinstance(val, (list, tuple)):
+            for v in val:
+                lines.append(f"- {v}")
+        else:
+            lines.append(str(val))
+        lines.append("")
+    if footer:
+        lines.append(f"---\n_{footer}_")
+    return "\n".join(lines)
+
+
 def send_wecom(title: str, body: str) -> bool:
     """企业微信群机器人 webhook: 免申请,内部群 / 外部群都能用。
     支持 @群成员(WECOM_MENTION=13800138000,或 @all)。
