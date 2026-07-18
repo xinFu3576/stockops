@@ -106,6 +106,22 @@ def _heuristic(state) -> Decision:
                         key_points.append(f"[{_src}/{_lbl}] {_title}")
     except Exception as _e:
         pass
+    # v0.15：辩论冲突分（多空分歧越大，降低信心 & 拉近 HOLD）
+    try:
+        from agents_llm.debate import compute_conflict_score
+        _cs = compute_conflict_score(state)
+        conflict_v = _cs.get("conflict_score", 0)
+        if conflict_v >= 60:
+            risks.append(f"[辩论] 分析师方向分歧强烈 (冲突分 {conflict_v}/100)，信号可靠度下降")
+            conf = conf * 0.7   # 高冲突降信心 30%
+            if abs(score) < 0.35:
+                # 边缘信号 + 高冲突 → 强制 HOLD
+                direction = Direction.HOLD
+                score = 0.0
+        elif conflict_v >= 30:
+            key_points.append(f"[辩论] 分析师方向存在分歧 (冲突分 {conflict_v}/100)")
+    except Exception:
+        pass
     entry, atr = _entry_and_atr(state)
     stop, take = _stop_take(direction, entry, atr)
     score_100 = max(0, min(100, int(round(50 + score * 50))))

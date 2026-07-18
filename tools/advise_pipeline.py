@@ -1,5 +1,72 @@
 """cmd_advise v0.12.0：整合实时价、组合层、LLM 综合看法、T+1 违规提示、advise 回测。"""
 from __future__ import annotations
+
+
+
+_I18N = {
+    "zh": {
+        "title": "🎯 StockOps 交易建议",
+        "industry_expo": "**组合层行业敞口**",
+        "action": {
+            "strong_buy": "🚀 **强烈买入**",
+            "buy":        "✅ **买入**",
+            "hold":       "⏸ **持有/观望**",
+            "sell":       "🚫 **卖出**",
+            "strong_sell": "🔻 **强烈卖出**",
+        },
+        "score": "评分", "confidence": "信心",
+        "entry": "建议入场价", "stop": "止损", "take": "止盈", "hold_days": "持有 ~{} 天",
+        "qty_adj": "建议数量 **{}** 股（原 {}，组合层调整）· 占用 {:.1%} of ¥{:,.0f}",
+        "qty_normal": "建议数量 **{}** 股（半 Kelly, 占用 {:.1%} of ¥{:,.0f}）",
+        "t1_note": "⚠️ **A 股 T+1**：当日买入的股票不能当日卖出",
+        "t1_viol": "🛑 **T+1 违规提示**：paper 账户在 {} 已买入 {}，当日 sell 会被拒单",
+        "sentiment": "全网情绪",
+        "key_points": "关键点", "risks": "风险", "catalysts": "催化",
+        "overview": "🧠 综合看法（LLM）",
+        "no_llm": "_（未配置 LLM_API_KEY，跳过综合看法）_",
+        "backtest": "📊 回测评估（历史）",
+        "bt_cols": "| Ticker | 年化 | Sharpe | MaxDD | 胜率 |",
+        "paper": "💼 Paper 持仓 vs 建议",
+        "paper_cash": "现金余额",
+        "paper_cols": "| Ticker | 当前持仓 | 建议方向 | 目标数量 | 差 |",
+        "paper_other": "_其他持仓（未在本次 advise 覆盖）：{}_",
+        "cost_info": "预估成本",
+    },
+    "en": {
+        "title": "🎯 StockOps Trade Advice",
+        "industry_expo": "**Industry exposure**",
+        "action": {
+            "strong_buy": "🚀 **STRONG BUY**",
+            "buy":        "✅ **BUY**",
+            "hold":       "⏸ **HOLD**",
+            "sell":       "🚫 **SELL**",
+            "strong_sell": "🔻 **STRONG SELL**",
+        },
+        "score": "Score", "confidence": "Confidence",
+        "entry": "Entry", "stop": "Stop-loss", "take": "Take-profit", "hold_days": "Hold ~{}d",
+        "qty_adj": "Suggested qty **{}** (raw {}, adjusted by portfolio layer) · {:.1%} of ${:,.0f}",
+        "qty_normal": "Suggested qty **{}** (half-Kelly, {:.1%} of ${:,.0f})",
+        "t1_note": "⚠️ **A-share T+1**: same-day buy cannot be sold same day",
+        "t1_viol": "🛑 **T+1 violation**: paper account bought {} on {}, same-day sell will be rejected",
+        "sentiment": "News sentiment",
+        "key_points": "Key points", "risks": "Risks", "catalysts": "Catalysts",
+        "overview": "🧠 Portfolio Overview (LLM)",
+        "no_llm": "_(LLM_API_KEY not set, overview skipped)_",
+        "backtest": "📊 Backtest (historical)",
+        "bt_cols": "| Ticker | AnnRet | Sharpe | MaxDD | Win |",
+        "paper": "💼 Paper Positions vs Advice",
+        "paper_cash": "Cash balance",
+        "paper_cols": "| Ticker | Current | Action | Target Qty | Delta |",
+        "paper_other": "_Other positions (not in this advise batch): {}_",
+        "cost_info": "Est. cost",
+    },
+}
+
+def _t(lang: str, key: str, default: str = "") -> str:
+    return _I18N.get(lang, _I18N["zh"]).get(key, default or key)
+
+
+
 import asyncio, pathlib
 from datetime import date, datetime
 from typing import Any
@@ -194,7 +261,7 @@ def backtest_advise(states):
     return rows
 
 
-async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=True, paper_check=False):
+async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=True, paper_check=False, lang='zh'):
     """异步核心：跑 states → orders → portfolio → LLM 综合 → markdown。"""
     from tools.rebalance import is_t_plus_1, estimate_cost
     from tools.options_chain import fetch_options_skew
@@ -218,9 +285,9 @@ async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=Tru
     except Exception:
         sent_all = {}
 
-    lines = [f"# 🎯 StockOps 交易建议 · {as_of.isoformat()}", ""]
+    lines = [f'# {_t(lang, "title")} · {as_of.isoformat()}', ""]
     if industry_w:
-        lines.append("**组合层行业敞口**：" + ", ".join(f"{k} {v:.1%}" for k, v in industry_w.items()))
+        lines.append(f'{_t(lang, "industry_expo")}: ' + ", ".join(f"{k} {v:.1%}" for k, v in industry_w.items()))
     if port_violations:
         for v in port_violations:
             lines.append(f"> ⚠️ {v}")
@@ -238,7 +305,7 @@ async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=Tru
             lines.append("")
             continue
         t_plus = "T+1" if is_t_plus_1(tk) else "T+0"
-        act = ACTION_MAP.get(dec.direction.value, "?")
+        act = _t(lang, "action").get(dec.direction.value, "?") if isinstance(_t(lang, "action"), dict) else ACTION_MAP.get(dec.direction.value, "?")
         meta = per_tk.get(tk, {})
         entry = meta.get("entry_price") or dec.entry_price or 0
         entry_src = meta.get("entry_source", "close")
@@ -262,7 +329,7 @@ async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=Tru
         tk_agg = sent_all.get(tk.upper()) or sent_all.get("_MARKET")
         sent_line = ""
         if tk_agg:
-            sent_line = f"全网情绪 {tk_agg.get('label')} ({tk_agg.get('avg'):+.3f}, n={tk_agg.get('count')})"
+            sent_line = f'{_t(lang,"sentiment")} {tk_agg.get("label")} ({tk_agg.get("avg"):+.3f}, n={tk_agg.get("count")})'
 
         # 成本
         cost_info = ""
@@ -270,7 +337,7 @@ async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=Tru
             try:
                 o = Order(ticker=tk, side=meta["side"], qty=adj_qty, price=entry, order_type="limit")
                 c = estimate_cost(o)
-                cost_info = f"预估成本 ¥{c['total']:.2f} ({c['total_bps']:.1f} bps)"
+                cost_info = f'{_t(lang,"cost_info")} ¥{c["total"]:.2f} ({c["total_bps"]:.1f} bps)'
             except Exception:
                 pass
 
@@ -281,31 +348,31 @@ async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=Tru
             if chg is not None:
                 entry_note += f", {chg:+.2f}%"
             entry_note += ")"
-        lines.append(f"{act} · 评分 **{dec.score}/100** · 信心 **{dec.confidence:.0%}**")
+        lines.append(f'{act} · {_t(lang,"score")} **{dec.score}/100** · {_t(lang,"confidence")} **{dec.confidence:.0%}**')
         if entry:
-            lines.append(f"- 建议入场价 **{_fmt_num(entry)}**{entry_note} · 止损 **{_fmt_num(dec.stop_loss)}** · 止盈 **{_fmt_num(dec.take_profit)}** · 持有 ~{dec.horizon_days} 天")
+            lines.append(f'- {_t(lang,"entry")} **{_fmt_num(entry)}**{entry_note} · {_t(lang,"stop")} **{_fmt_num(dec.stop_loss)}** · {_t(lang,"take")} **{_fmt_num(dec.take_profit)}** · {_t(lang,"hold_days").format(dec.horizon_days)}')
         if orig_qty:
             if adj_qty != orig_qty:
-                lines.append(f"- 建议数量 **{adj_qty}** 股（原 {orig_qty}，组合层调整）· 占用 {pos_frac:.1%} of ¥{equity:,.0f}")
+                lines.append(f'- {_t(lang,"qty_adj").format(adj_qty, orig_qty, pos_frac, equity)}')
             else:
-                lines.append(f"- 建议数量 **{adj_qty}** 股（半 Kelly, 占用 {pos_frac:.1%} of ¥{equity:,.0f}）")
+                lines.append(f'- {_t(lang,"qty_normal").format(adj_qty, pos_frac, equity)}')
         if cost_info: lines.append(f"- {cost_info}")
         if is_t_plus_1(tk):
-            lines.append(f"- ⚠️ **A 股 T+1**：当日买入的股票不能当日卖出")
+            lines.append(f'- {_t(lang,"t1_note")}')
         if t1_viol.get(tk) and meta.get("side") == "sell":
-            lines.append(f"- 🛑 **T+1 违规提示**：paper 账户在 {as_of.isoformat()} 已买入 {tk}，当日 sell 会被拒单")
+            lines.append(f'- {_t(lang,"t1_viol").format(tk, as_of.isoformat())}')
         if sent_line: lines.append(f"- {sent_line}")
         if opt_line: lines.append(f"- {opt_line}")
         if dec.key_points:
-            lines.append(f"- **关键点**：")
+            lines.append(f'- **{_t(lang,"key_points")}**:')
             for k in dec.key_points[:5]:
                 lines.append(f"  - {k}")
         if dec.risks:
-            lines.append(f"- **风险**：")
+            lines.append(f'- **{_t(lang,"risks")}**:')
             for r in dec.risks[:5]:
                 lines.append(f"  - {r}")
         if dec.catalysts:
-            lines.append(f"- **催化**：")
+            lines.append(f'- **{_t(lang,"catalysts")}**:')
             for c in dec.catalysts[:4]:
                 lines.append(f"  - {c}")
         lines.append("")
@@ -327,19 +394,19 @@ async def run_advise(tickers, as_of, equity, include_backtest=False, use_llm=Tru
     if use_llm and llm_sections:
         overview = await _llm_overview(llm_sections)
     if overview:
-        lines.append("## 🧠 综合看法（LLM）")
+        lines.append(f'## {_t(lang,"overview")}')
         lines.append(overview)
         lines.append("")
     elif use_llm:
-        lines.append("_（未配置 LLM_API_KEY，跳过综合看法）_\n")
+        lines.append(_t(lang,"no_llm") + "\n")
 
     # advise 回测
     bt_rows = []
     if include_backtest:
         bt_rows = backtest_advise(states)
         if bt_rows:
-            lines.append("## 📊 回测评估（历史）")
-            lines.append("| Ticker | 年化 | Sharpe | MaxDD | 胜率 |")
+            lines.append(f'## {_t(lang,"backtest")}')
+            lines.append(_t(lang,"bt_cols"))
             lines.append("|---|---|---|---|---|")
             for r in bt_rows:
                 if "error" in r:
@@ -446,11 +513,21 @@ def to_json_summary(out: dict) -> dict:
 
 
 async def execute_advise_orders(orders: list, portfolio_adjust: dict | None = None,
-                                skip_t1_violations: bool = True) -> dict:
-    """把 advise 建议下到 paper broker。返回每单结果。"""
-    from tools.brokers.paper import PaperBroker
+                                skip_t1_violations: bool = True,
+                                broker: str = "paper") -> dict:
+    """把 advise 建议下到指定 broker。支持 paper / ibkr / futu。返回每单结果。"""
     from tools.rebalance import is_t_plus_1
-    pb = PaperBroker()
+    if broker == "paper":
+        from tools.brokers.paper import PaperBroker
+        pb = PaperBroker()
+    elif broker == "ibkr":
+        from tools.brokers.ibkr import IBKRPaperBroker
+        pb = IBKRPaperBroker()
+    elif broker == "futu":
+        from tools.brokers.futu import FutuPaperBroker
+        pb = FutuPaperBroker()
+    else:
+        return {"orders": [], "count": 0, "error": f"unknown broker {broker}"}
     results = []
     # 优先使用 portfolio 调整后的 qty
     adj_qty = (portfolio_adjust or {}).get("adjusted") or {}
@@ -459,15 +536,18 @@ async def execute_advise_orders(orders: list, portfolio_adjust: dict | None = No
         if qty <= 0:
             results.append({"ticker": o.ticker, "status": "skipped", "reason": "adjusted qty=0"})
             continue
-        # T+1 违规检查：同日 buy 后 sell 会被拦
-        if skip_t1_violations and o.side == "sell" and is_t_plus_1(o.ticker):
-            lots = await pb.position_open_dates()
-            from datetime import date as _d
-            today = _d.today().isoformat()
-            if any(l.get("date") == today for l in lots.get(o.ticker, [])):
-                results.append({"ticker": o.ticker, "status": "blocked",
-                                "reason": "T+1: 当日买入不能卖出"})
-                continue
+        # T+1 违规检查：同日 buy 后 sell 会被拦（仅 paper 提供 position_open_dates）
+        if skip_t1_violations and o.side == "sell" and is_t_plus_1(o.ticker) and hasattr(pb, "position_open_dates"):
+            try:
+                lots = await pb.position_open_dates()
+                from datetime import date as _d
+                today = _d.today().isoformat()
+                if any(l.get("date") == today for l in lots.get(o.ticker, [])):
+                    results.append({"ticker": o.ticker, "status": "blocked",
+                                    "reason": "T+1: 当日买入不能卖出"})
+                    continue
+            except Exception:
+                pass
         from core.schemas import Order
         real = Order(ticker=o.ticker, side=o.side, qty=qty,
                      price=o.price, order_type=o.order_type or "limit", tag=o.tag or "advise")

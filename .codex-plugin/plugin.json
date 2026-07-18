@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.14.0",
-  "description": "StockOps v0.14.0 · portfolio_view adapt 权重 + advise --json/--execute + HK IV skew (Futu/aastocks) + Dashboard 一键推送",
+  "version": "0.15.0",
+  "description": "StockOps v0.15.0 · Live IBKR/Futu 下单闸门 + advise --lang zh/en + debate 冲突分 + daily.sh 自动归档 + KB(local/Notion/Confluence/GH)",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {

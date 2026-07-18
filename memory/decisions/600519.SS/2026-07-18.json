@@ -1,12 +1,12 @@
 {
   "ticker": "600519.SS",
-  "decision_ts": "2026-07-18T09:42:34.939320",
+  "decision_ts": "2026-07-18T10:04:19.483105",
   "decision": {
     "ticker": "600519.SS",
     "as_of": "2026-07-18",
     "direction": "hold",
-    "score": 51,
-    "confidence": 0.48,
+    "score": 52,
+    "confidence": 0.47,
     "entry_price": 1253.0,
     "stop_loss": 1197.006,
     "take_profit": 1308.994,

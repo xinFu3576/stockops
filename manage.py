@@ -261,6 +261,16 @@ def cmd_ab(a):
 
 
 
+def cmd_kb_archive(a):
+    """把指定 md 文件 (advise 输出) 归档到知识库。用法: kb-archive path.md [--date YYYY-MM-DD]"""
+    from datetime import date
+    from tools.knowledge_base import archive_daily_advise
+    body = pathlib.Path(a.path).read_text(encoding="utf-8")
+    as_of = date.fromisoformat(a.date) if a.date else date.today()
+    r = archive_daily_advise(as_of, body)
+    print(f"[kb-archive] {r}")
+    return 0
+
 def cmd_advise(a):
     """一站式建议：实时价 + 组合层调整 + LLM 综合 + T+1 违规检查（v0.12）。"""
     import asyncio, pathlib
@@ -276,6 +286,7 @@ def cmd_advise(a):
         include_backtest=bool(getattr(a, "with_backtest", False)),
         use_llm=(not getattr(a, "no_llm", False)),
         paper_check=bool(getattr(a, "paper_check", False)),
+        lang=getattr(a, "lang", "zh"),
     ))
     body_md = out["markdown"]
 
@@ -297,21 +308,49 @@ def cmd_advise(a):
         else:
             print(body_md)
 
-    # --execute：一键下到 paper broker
-    if getattr(a, "execute", None) == "paper":
+    # --execute：一键下到 paper/ibkr/futu broker
+    exec_broker = getattr(a, "execute", None)
+    if exec_broker:
+        if exec_broker in ("ibkr", "futu") and not getattr(a, "i_accept_real_money", False):
+            print(f"[SAFETY] --execute {exec_broker} 未附带 --i-accept-real-money，强制降级到 paper")
+            exec_broker = "paper"
         if not a.yes:
-            resp = input("确认把以上建议下到 paper broker (y/N)? ").strip().lower()
+            resp = input(f"确认把以上建议下到 {exec_broker} broker (y/N)? ").strip().lower()
             if resp != "y":
                 print("[advise --execute] 已取消")
                 return 0
         from tools.advise_pipeline import execute_advise_orders
         exec_res = asyncio.run(execute_advise_orders(
-            out.get("orders", []), out.get("portfolio_adjust"),
+            out.get("orders", []), out.get("portfolio_adjust"), broker=exec_broker,
         ))
-        print(f"\n[advise --execute paper] {exec_res.get('count', 0)} 单：")
+        print(f"\n[advise --execute {exec_broker}] {exec_res.get('count', 0)} 单：")
         for r in exec_res.get("orders", []):
             print(f"  {r.get('ticker'):<12s} {r.get('side','-'):<5s} qty={r.get('qty','-')} "
                   f"@{r.get('price','-')} status={r.get('status')} {r.get('reason','') or ''}")
+        # 写入执行日志供知识库/daily.sh 消费
+        try:
+            from datetime import datetime as _dt
+            import json as _json
+            log_dir = pathlib.Path("reports/execute")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            ts = _dt.now().strftime("%Y%m%dT%H%M%S")
+            (log_dir / f"advise-{exec_broker}-{ts}.json").write_text(
+                _json.dumps({"as_of": as_of.isoformat(), "broker": exec_broker,
+                             "orders": exec_res.get("orders", [])},
+                            ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    # --archive: 写入本地/Notion/Confluence/GitHub 知识库
+    if getattr(a, "archive", False):
+        from tools.knowledge_base import archive_daily_advise
+        exec_orders = None
+        try:
+            exec_orders = exec_res.get("orders")   # noqa: F821
+        except Exception:
+            pass
+        kb = archive_daily_advise(as_of, body_md, exec_orders)
+        print(f"\n[archive] {kb}")
 
     if a.notify and out["payload_sections"]:
         msg = format_notification(f"交易建议 · {as_of.isoformat()}",
@@ -403,6 +442,10 @@ def main():
     p.set_defaults(fn=cmd_rebalance)
     p = sub.add_parser("options-skew"); p.add_argument("--tickers"); p.set_defaults(fn=cmd_options_skew)
     p = sub.add_parser("ab"); p.add_argument("--a"); p.add_argument("--b"); p.add_argument("--days", type=int, default=60); p.set_defaults(fn=cmd_ab)
+    p = sub.add_parser("kb-archive", help="把 advise md 归档到本地/Notion/Confluence/GitHub 知识库")
+    p.add_argument("path")
+    p.add_argument("--date")
+    p.set_defaults(fn=cmd_kb_archive)
     p = sub.add_parser("advise", help="一站式建议：分析 → 买/卖 + 数量 + 止损止盈 (A股T+1, 其他T+0)")
     p.add_argument("--tickers", required=True, help="逗号分隔 (e.g. 600519.SS,AAPL,0700.HK)")
     p.add_argument("--date")
@@ -412,8 +455,11 @@ def main():
     p.add_argument("--with-backtest", action="store_true", help="附加历史回测表")
     p.add_argument("--no-llm", action="store_true", help="跳过 LLM 综合看法")
     p.add_argument("--paper-check", action="store_true", help="附加当前持仓 vs 建议 差")
+    p.add_argument("--lang", default="zh", choices=["zh", "en"], help="输出语言")
+    p.add_argument("--archive", action="store_true", help="写入本地/Notion/Confluence/GitHub 知识库")
     p.add_argument("--json", action="store_true", help="输出结构化 JSON (供上游 agent 消费)")
-    p.add_argument("--execute", choices=["paper"], help="一键把建议下到 paper broker")
+    p.add_argument("--execute", choices=["paper", "ibkr", "futu"], help="一键把建议下到指定 broker (paper/ibkr/futu)")
+    p.add_argument("--i-accept-real-money", action="store_true", help="ibkr/futu 真钱下单必填")
     p.add_argument("--yes", action="store_true", help="配合 --execute，跳过确认")
     p.set_defaults(fn=cmd_advise)
     p = sub.add_parser("backtest-advise", help="对 advise 输出跑历史回测")

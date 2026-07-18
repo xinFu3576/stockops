@@ -1,6 +1,6 @@
 {
   "ticker": "AAPL",
-  "decision_ts": "2026-07-18T09:49:07.307466",
+  "decision_ts": "2026-07-18T10:04:09.741221",
   "decision": {
     "ticker": "AAPL",
     "as_of": "2026-07-18",
@@ -18,7 +18,8 @@
       "[sentiment] 舆情 +0.00 覆盖 0 条",
       "[macro_event] 宏观 regime: neutral",
       "[portfolio_view] [综合] options / 微结构因子缺失，转由技术+基本面主导",
-      "[情报] 情绪中性 avg=-0.005 (n=442)"
+      "[情报] 情绪中性 avg=-0.005 (n=442)",
+      "[辩论] 分析师方向存在分歧 (冲突分 37/100)"
     ],
     "risks": [
       "[fundamental] 未接入财报数据",

@@ -128,7 +128,7 @@ async def n_analysts(s: AgentState) -> AgentState:
 @node("debate")
 async def n_debate(s: AgentState) -> AgentState:
     from agents_llm import debate
-    s.debate = await debate.run(s, max_rounds=2)
+    s.debate = await debate.run(s, max_rounds=3)
     return s
 
 @node("research_manager")

@@ -51,3 +51,50 @@ async def run(state, max_rounds: int = 2) -> list[DebateTurn]:
                 v = _heuristic(state, side, r, turns)
             turns.append(v)
     return turns
+
+
+
+def compute_conflict_score(state) -> dict:
+    """量化 5 位分析师之间的方向分歧。
+
+    - variance：各 analyst score 的方差（0.0-1.0）
+    - dir_disagreement：多空分裂 (bull_count / total 距 0.5 的距离)
+    - conflict_score：合并指标 [0-100]，>50 表示强烈分歧
+    """
+    if not state.verdicts:
+        return {"variance": 0.0, "dir_disagreement": 0.0, "conflict_score": 0}
+    def _derive_score(v):
+        if hasattr(v, "score") and getattr(v, "score", None) is not None:
+            return float(v.score)
+        _map = {Direction.STRONG_BUY: 1.0, Direction.BUY: 0.5,
+                Direction.HOLD: 0.0,
+                Direction.SELL: -0.5, Direction.STRONG_SELL: -1.0}
+        return _map.get(v.direction, 0.0) * float(getattr(v, "confidence", 1.0))
+    scores = [_derive_score(v) for v in state.verdicts.values()]
+    n = len(scores)
+    mean = sum(scores) / n
+    variance = sum((s - mean) ** 2 for s in scores) / n
+    bulls = sum(1 for v in state.verdicts.values() if v.direction in _BULL)
+    bears = sum(1 for v in state.verdicts.values() if v.direction in _BEAR)
+    total = max(1, n)
+    # 距离 50/50 越近分歧越大
+    dir_disagreement = 1.0 - abs((bulls - bears) / total)
+    conflict = min(100, int(round(100 * (0.6 * min(1.0, variance / 0.15) + 0.4 * dir_disagreement))))
+    return {"variance": round(variance, 4),
+            "dir_disagreement": round(dir_disagreement, 3),
+            "conflict_score": conflict,
+            "bulls": bulls, "bears": bears, "holds": n - bulls - bears,
+            "score_mean": round(mean, 3)}
+
+
+def synthesize_debate(turns: list[DebateTurn], conflict: dict) -> dict:
+    """把辩论摘要 + 冲突分打包给 research_manager."""
+    bull_turns = [t for t in turns if t.side == "bull"]
+    bear_turns = [t for t in turns if t.side == "bear"]
+    return {
+        "conflict": conflict,
+        "bull_summary": "; ".join(t.argument[:120] for t in bull_turns[-2:]),
+        "bear_summary": "; ".join(t.argument[:120] for t in bear_turns[-2:]),
+        "n_rounds": max((t.round for t in turns), default=0),
+        "high_conflict": conflict.get("conflict_score", 0) >= 60,
+    }
