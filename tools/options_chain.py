@@ -14,9 +14,34 @@ from typing import Optional
 from datetime import date, datetime, timedelta
 
 _CACHE: dict[str, tuple[float, dict]] = {}
-_TTL = 300  # 5 分钟缓存
+_TTL = 300  # 5 分钟内存缓存
+_DISK_TTL = 3600  # 1 小时磁盘缓存
+
+from pathlib import Path as _P
+_CACHE_DIR = _P(__file__).resolve().parent.parent / "data" / "options_cache"
+_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 _CTX = ssl.create_default_context()
+
+
+def _disk_load(ticker: str) -> Optional[dict]:
+    f = _CACHE_DIR / f"{ticker.replace('/','_')}.json"
+    if not f.exists(): return None
+    try:
+        d = json.loads(f.read_text())
+        if time.time() - d.get("_ts", 0) > _DISK_TTL: return None
+        return d
+    except Exception:
+        return None
+
+
+def _disk_save(ticker: str, obj: dict):
+    f = _CACHE_DIR / f"{ticker.replace('/','_')}.json"
+    try:
+        obj = dict(obj); obj["_ts"] = time.time()
+        f.write_text(json.dumps(obj, default=str, ensure_ascii=False, indent=2))
+    except Exception:
+        pass
 
 
 @dataclass
@@ -195,19 +220,38 @@ def _agg_chain(ticker, source, spot, expiry, opts, *,
     )
 
 
-def fetch_options_skew(ticker: str) -> Optional[OptionsSkew]:
-    """三级降级：Tradier → Polygon → None(caller 用 proxy)。带 5min 缓存。"""
+def fetch_options_skew(ticker: str, force_refresh: bool = False) -> Optional[OptionsSkew]:
+    """三级降级：Tradier → Polygon → None(caller 用 proxy)。
+    双层缓存：内存 5min + 磁盘 1h（data/options_cache/{ticker}.json）。"""
     key = f"opt::{ticker}"
     now = time.time()
-    if key in _CACHE and now - _CACHE[key][0] < _TTL:
-        return OptionsSkew(**_CACHE[key][1]) if _CACHE[key][1] else None
+    if not force_refresh:
+        if key in _CACHE and now - _CACHE[key][0] < _TTL:
+            return OptionsSkew(**_CACHE[key][1]) if _CACHE[key][1] else None
+        # 磁盘 fallback
+        disk = _disk_load(ticker)
+        if disk:
+            data = {k: v for k, v in disk.items() if k != "_ts"}
+            _CACHE[key] = (now, data)
+            return OptionsSkew(**data) if data else None
     for fn in (fetch_tradier, fetch_polygon):
         r = fn(ticker)
         if r and (r.iv_skew is not None or r.put_call_ratio is not None):
-            _CACHE[key] = (now, r.__dict__.copy())
+            d = r.__dict__.copy()
+            _CACHE[key] = (now, d)
+            _disk_save(ticker, d)
             return r
     _CACHE[key] = (now, None)
     return None
+
+
+def cache_stats() -> dict:
+    """磁盘缓存统计。"""
+    import os as _os
+    files = list(_CACHE_DIR.glob("*.json"))
+    total_size = sum(f.stat().st_size for f in files)
+    return {"n_files": len(files), "total_bytes": total_size,
+            "dir": str(_CACHE_DIR), "memory_entries": len(_CACHE)}
 
 
 def health() -> dict:

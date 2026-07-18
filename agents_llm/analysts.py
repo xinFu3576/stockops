@@ -102,6 +102,28 @@ def _heuristic_sentiment(state) -> AnalystVerdict:
         if abs(sig.score) > 0.7: risks.append("情绪极端，警惕反转")
     else:
         pts.append("暂未接入新闻源，情绪中性"); risks.append("情绪层缺失")
+
+    # v0.10.0：options-implied 情绪（真 IV skew + P/C ratio），三级降级
+    try:
+        from tools.options_chain import fetch_options_skew
+        opt = fetch_options_skew(state.ticker)
+        if opt and (opt.iv_skew is not None or opt.put_call_ratio is not None):
+            if opt.iv_skew is not None:
+                # skew = put_iv - call_iv > 0 → 恐慌溢价（下跌保护贵）
+                skew = opt.iv_skew
+                pts.append(f"[options/{opt.source}] IV skew={skew:+.4f}")
+                s += max(-0.3, min(0.3, -skew * 3))  # skew↑ → 情绪↓
+                if abs(skew) > 0.08:
+                    risks.append(f"IV skew 极值 {skew:+.3f}，隐含事件风险")
+            if opt.put_call_ratio is not None:
+                pcr = opt.put_call_ratio
+                pts.append(f"[options] P/C ratio={pcr:.2f}")
+                # pcr > 1.2 = 空头拥挤，反向 → 加分；pcr < 0.6 = 多头拥挤，减分
+                if pcr > 1.5: s += 0.1
+                elif pcr < 0.5: s -= 0.1
+    except Exception:
+        pass
+
     return AnalystVerdict(analyst="sentiment", direction=_score_to_direction(s),
         confidence=0.3 + min(0.3, abs(s) * 0.4),
         key_points=pts, risks=risks or ["情绪指标滞后于价格"], horizon_days=5)

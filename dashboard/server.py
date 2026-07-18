@@ -759,13 +759,94 @@ def _ab_sync(params: dict) -> dict:
         }
 
     resA, resB = _replay(wA), _replay(wB)
+    # v0.10.0: paired bootstrap 显著性
+    import random
+    def _bootstrap_pvalue(recs_local: list, wA: dict, wB: dict, n_iter: int = 500) -> dict:
+        if len(recs_local) < 8:
+            return {"p_value": None, "ci_diff_low": None, "ci_diff_high": None, "n_iter": 0}
+        # 对每条样本先算 (pnl_A - pnl_B) 差；然后 resample with replacement
+        diffs_orig = []
+        for r in recs_local:
+            v = r.get("verdicts") or {}
+            realized = r.get("realized_return")
+            if realized is None or not v: continue
+            def _pnl(w):
+                score = 0.0
+                for name, verd in v.items():
+                    if name not in w: continue
+                    try: d_e = Direction(verd.get("direction"))
+                    except Exception: continue
+                    score += _DIR.get(d_e, 0) * verd.get("confidence", 0.5) * w[name]
+                pred = "buy" if score > 0.05 else ("sell" if score < -0.05 else "hold")
+                return realized if pred == "buy" else (-realized if pred == "sell" else 0)
+            diffs_orig.append(_pnl(wA) - _pnl(wB))
+        if not diffs_orig: return {"p_value": None, "ci_diff_low": None, "ci_diff_high": None, "n_iter": 0}
+        # bootstrap CI
+        rng = random.Random(42)
+        means = []
+        n = len(diffs_orig)
+        for _ in range(n_iter):
+            m = sum(diffs_orig[rng.randint(0, n-1)] for _ in range(n)) / n
+            means.append(m)
+        means.sort()
+        low, high = means[int(0.025*n_iter)], means[int(0.975*n_iter)]
+        # 双侧 p-value: fraction where sign 与 orig_mean 相反
+        orig_mean = sum(diffs_orig)/n
+        if orig_mean == 0:
+            p = 1.0
+        else:
+            same_side = sum(1 for m in means if (m > 0) == (orig_mean > 0))
+            p = 2 * (1 - same_side/n_iter)
+        return {"p_value": round(min(p, 1.0), 4), "ci_diff_low": round(low, 5),
+                "ci_diff_high": round(high, 5), "n_iter": n_iter, "orig_mean_diff": round(orig_mean, 5)}
+
+    boot = _bootstrap_pvalue(recs, wA, wB, n_iter=500)
+
+    # walk-forward: 按时间分 4 段，每段独立比较
+    walkfwd = []
+    if len(recs) >= 8:
+        recs_sorted = sorted(recs, key=lambda r: r.get("decision", {}).get("as_of", ""))
+        n_folds = 4
+        chunk = max(2, len(recs_sorted) // n_folds)
+        for i in range(n_folds):
+            fold = recs_sorted[i*chunk:(i+1)*chunk]
+            if not fold: continue
+            # 临时替换 recs 变量（简化：直接内联 replay）
+            def _replay_fold(w):
+                wins=total=0; ret=0
+                for r in fold:
+                    v = r.get("verdicts") or {}
+                    realized = r.get("realized_return")
+                    if realized is None or not v: continue
+                    score = 0.0
+                    for name, verd in v.items():
+                        if name not in w: continue
+                        try: de = Direction(verd.get("direction"))
+                        except Exception: continue
+                        score += _DIR.get(de,0) * verd.get("confidence",0.5) * w[name]
+                    pred = "buy" if score>0.05 else ("sell" if score<-0.05 else "hold")
+                    pnl = realized if pred=="buy" else (-realized if pred=="sell" else 0)
+                    total += 1; ret += pnl
+                    if pnl>0: wins += 1
+                return {"n":total, "return": round(ret,4), "win_rate": round(wins/total,3) if total else None}
+            rA, rB = _replay_fold(wA), _replay_fold(wB)
+            walkfwd.append({"fold": i+1, "n": len(fold), "A": rA, "B": rB,
+                             "winner": "A" if (rA["return"] or 0) > (rB["return"] or 0) else "B"})
+
     winner = "A" if (resA.get("avg_return") or 0) > (resB.get("avg_return") or 0) else "B"
+    # 显著性标签
+    sig_label = "N/A"
+    if boot.get("p_value") is not None:
+        p = boot["p_value"]
+        sig_label = ("**significant**" if p < 0.05 else ("marginal" if p < 0.10 else "not significant"))
     return {
         "since": since.isoformat(), "days": days,
         "weights_A": wA, "weights_B": wB,
         "result_A": resA, "result_B": resB,
         "winner": winner if resA["n"] and resB["n"] else "N/A",
         "n_samples": resA["n"],
+        "bootstrap": boot, "significance": sig_label,
+        "walk_forward": walkfwd,
     }
 
 
@@ -832,7 +913,9 @@ async function run(){
         <tr><th>权重</th><td><pre style="margin:0;font-size:11px">${JSON.stringify(r.weights_B,null,2)}</pre></td></tr></table>
       </div>
     </div>
-    <p style="color:#8b949e">回看天数 ${r.days} · winner=<b style="color:#3fb950">${r.winner}</b></p>
+    <p style="color:#8b949e">回看天数 ${r.days} · winner=<b style="color:#3fb950">${r.winner}</b> · 显著性=<b>${r.significance||'N/A'}</b> (p=${(r.bootstrap&&r.bootstrap.p_value)||'N/A'})</p>
+    ${r.bootstrap && r.bootstrap.n_iter ? `<div class="card"><b>📈 Bootstrap 95% CI of (A-B) mean-return:</b> [${(r.bootstrap.ci_diff_low*100).toFixed(3)}%, ${(r.bootstrap.ci_diff_high*100).toFixed(3)}%] · n_iter=${r.bootstrap.n_iter} · orig_mean_diff=${(r.bootstrap.orig_mean_diff*100).toFixed(4)}%</div>` : ''}
+    ${r.walk_forward && r.walk_forward.length ? `<h2>🚶 Walk-forward (${r.walk_forward.length} folds)</h2><table><tr><th>Fold</th><th>N</th><th>A return</th><th>B return</th><th>Winner</th></tr>${r.walk_forward.map(w=>'<tr><td>'+w.fold+'</td><td>'+w.n+'</td><td>'+(w.A.return*100).toFixed(2)+'%</td><td>'+(w.B.return*100).toFixed(2)+'%</td><td class="pill '+(w.winner==='A'?'a':'b')+'">'+w.winner+'</td></tr>').join('')}</table>` : ''}
   `;
   document.getElementById('results').innerHTML = html;
 }

@@ -189,6 +189,21 @@ def cmd_rebalance(a):
     if a.positions and pathlib.Path(a.positions).exists():
         pos_raw = json.loads(pathlib.Path(a.positions).read_text())
         positions = {p["ticker"]: Position(**p) for p in pos_raw}
+    elif getattr(a, "execute", None):
+        # v0.10.0：--execute 时从 broker 直接拉 positions
+        import asyncio
+        from tools.brokers import get_broker
+        try:
+            _b = get_broker(a.execute)
+            _pos = asyncio.run(_b.positions())
+            positions = {tk: Position(ticker=tk, qty=int(v.get("qty",0)),
+                                       avg_cost=float(v.get("avg_price",0)),
+                                       market_price=float(v.get("last",0) or v.get("avg_price",0)))
+                          for tk, v in _pos.items() if int(v.get("qty",0)) != 0}
+            print(f"[rebalance] 从 {a.execute} broker 拉到 {len(positions)} 持仓")
+        except Exception as e:
+            print(f"[rebalance] broker positions 拉取失败: {e}")
+            positions = {}
     else:
         positions = {}
     if a.prices and pathlib.Path(a.prices).exists():
@@ -202,6 +217,19 @@ def cmd_rebalance(a):
         print(f"  {o.side:>4s} {o.ticker:>12s} qty={o.qty:>6d} @ {o.price}  [{o.tag}]")
     print(f"\n[rebalance] reasons ({len(plan.reasons)}):")
     for r in plan.reasons: print(f"  - {r}")
+
+    # v0.10.0: 联动 broker 直接下单
+    if getattr(a, "execute", None) and plan.orders:
+        import asyncio
+        from tools.brokers import get_broker
+        broker = get_broker(a.execute)
+        print(f"\n[rebalance] 通过 broker={a.execute} 执行 {len(plan.orders)} 单...")
+        async def _run():
+            for o in plan.orders:
+                res = await broker.place_order(o)
+                fp = res.filled_price if res.filled_price else o.price
+                print(f"  [{res.status}] {o.side} {o.ticker} qty={o.qty} @ {fp} → order_id={res.order_id} {res.reason}")
+        asyncio.run(_run())
     return 0
 
 
@@ -289,6 +317,7 @@ def main():
     p.add_argument("--tolerance", type=float, default=0.05)
     p.add_argument("--positions", help="JSON 文件路径 [{ticker, qty, avg_cost, market_price}]")
     p.add_argument("--prices", help="JSON 文件路径 {ticker: price}")
+    p.add_argument("--execute", choices=["dry_run","paper","ibkr","futu"], help="直接下单到 broker (可选)")
     p.set_defaults(fn=cmd_rebalance)
     p = sub.add_parser("options-skew"); p.add_argument("--tickers"); p.set_defaults(fn=cmd_options_skew)
     p = sub.add_parser("ab"); p.add_argument("--a"); p.add_argument("--b"); p.add_argument("--days", type=int, default=60); p.set_defaults(fn=cmd_ab)
