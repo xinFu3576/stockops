@@ -1,5 +1,5 @@
 .PHONY: help daily test verify status paper-status paper-reset install clean pack
-VERSION ?= 0.4.0
+VERSION ?= 0.5.0
 PY := ./.venv/bin/python
 
 help:
@@ -39,7 +39,8 @@ clean:
 	rm -rf .cache __pycache__ */__pycache__ */*/__pycache__ .pytest_cache
 
 pack:
-	cd .. && tar --exclude='stock-agents-team/.venv' --exclude='stock-agents-team/.cache' \
+	cd .. && tar --exclude='stock-agents-team/.venv' \
+	  --exclude='stock-agents-team/.git' --exclude='stock-agents-team/.cache' \
 	  --exclude='stock-agents-team/__pycache__' --exclude='*/__pycache__' \
 	  --exclude='stock-agents-team/data/paper' --exclude='stock-agents-team/data/batch_state' \
 	  --exclude='stock-agents-team/data/price_watch' --exclude='stock-agents-team/reports' \

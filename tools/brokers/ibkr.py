@@ -101,3 +101,18 @@ class IBKRPaperBroker:
             if v.tag == "TotalCashValue" and v.currency == "USD":
                 return float(v.value)
         return 0.0
+    async def health(self) -> dict:
+        """诊断:gateway 是否可连、账户是否可读。"""
+        try:
+            import ib_insync  # noqa
+        except ImportError:
+            return {"ok": False, "reason": "ib_insync 未安装 (pip install ib_insync)"}
+        ib = await self._connect()
+        if ib is None:
+            cfg = _cfg()
+            return {"ok": False, "reason": f"无法连接 IB Gateway {cfg['host']}:{cfg['port']} (client_id={cfg['cid']})"}
+        try:
+            cash = await self.cash()
+            return {"ok": True, "cash": cash, "positions": len(await self.positions())}
+        except Exception as e:
+            return {"ok": False, "reason": f"{type(e).__name__}: {e}"}

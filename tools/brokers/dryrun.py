@@ -23,3 +23,6 @@ class DryRunBroker:
 
     async def cash(self) -> float:
         return 0.0
+
+    async def health(self) -> dict:
+        return {"ok": True, "note": "dry_run 无外部依赖"}

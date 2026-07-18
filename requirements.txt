@@ -23,3 +23,8 @@ numpy
 # anthropic
 # instructor
 # langgraph
+
+# 交易适配 (broker adapters, 装了自动 upgrade 到真实交易)
+# 取消注释后 pip install -r requirements.txt 即可启用
+# ib_insync>=0.9         # IBKR TWS / Gateway
+# futu-api>=9.0          # 富途 opend

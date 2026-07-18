@@ -88,3 +88,11 @@ class PaperBroker:
 
     async def cash(self) -> float:
         return _load_state()["cash"]
+
+    async def health(self) -> dict:
+        try:
+            cash = await self.cash()
+            pos = await self.positions()
+            return {"ok": True, "cash": cash, "positions": len(pos)}
+        except Exception as e:
+            return {"ok": False, "reason": f"{type(e).__name__}: {e}"}

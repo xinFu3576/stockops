@@ -95,6 +95,20 @@ def cmd_paper_reset(a):
     return 0
 
 
+
+def cmd_broker_health(a):
+    import asyncio, json
+    from tools.brokers import get_broker
+    names = a.brokers.split(",") if a.brokers else ["dry_run","paper","ibkr","futu"]
+    async def _run():
+        for n in names:
+            b = get_broker(n.strip())
+            h = await b.health() if hasattr(b, "health") else {"ok": True, "reason": "no health() method"}
+            print(f"{n:>10s}: {json.dumps(h, ensure_ascii=False)}")
+    asyncio.run(_run())
+    return 0
+
+
 def cmd_dashboard(a):
     return _run("-m", "dashboard.server", "--port", str(a.port))
 
@@ -168,6 +182,7 @@ def main():
     sub.add_parser("paper-status").set_defaults(fn=cmd_paper_status)
     sub.add_parser("paper-reset").set_defaults(fn=cmd_paper_reset)
     p = sub.add_parser("dashboard"); p.add_argument("--port", type=int, default=8765); p.set_defaults(fn=cmd_dashboard)
+    p = sub.add_parser("broker-health"); p.add_argument("--brokers", default="dry_run,paper,ibkr,futu"); p.set_defaults(fn=cmd_broker_health)
     sub.add_parser("test").set_defaults(fn=cmd_test)
     sub.add_parser("status").set_defaults(fn=cmd_status)
 

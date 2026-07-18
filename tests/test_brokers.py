@@ -30,3 +30,16 @@ def test_paper_fills_and_persists(tmp_path, monkeypatch):
 def test_ibkr_gracefully_stub():
     r = _run(get_broker("ibkr").place_order(Order(ticker="AAPL", side="buy", qty=1, price=1.0)))
     assert r.status in ("stub", "rejected")  # 无 ib_insync / gateway
+
+
+def test_futu_gracefully_stub():
+    r = _run(get_broker("futu").place_order(Order(ticker="0700.HK", side="buy", qty=100, price=300.0)))
+    assert r.status in ("stub", "rejected")
+
+
+def test_all_brokers_have_health():
+    for name in ("dry_run", "paper", "ibkr", "futu"):
+        b = get_broker(name)
+        assert hasattr(b, "health"), f"{name} broker 缺少 health()"
+        h = _run(b.health())
+        assert "ok" in h, f"{name}.health() 应含 ok 字段: {h}"

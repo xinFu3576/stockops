@@ -1,0 +1,4 @@
+# Broker SDKs (可选:真实交易时用)
+# 安装: pip install -r requirements-broker.txt
+ib_insync>=0.9.86
+futu-api>=9.0.0

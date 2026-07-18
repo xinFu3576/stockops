@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.4.0",
-  "description": "StockOps 股票交易多 agent 团队 v0.4.0 (8 agents, 17 skills)。含 Broker fallback (Paper/IBKR/futu)、LLM Profile (openai/deepseek/kimi/qwen/ark/vllm)、4 层数据兜底 (yahoo/sina/eastmoney/akshare/tushare/wind)、Web Dashboard (K 线图+快捷操作)、闭环学习 adapt、分钟级预警、pytest+CI、brew tap。",
+  "version": "0.5.0",
+  "description": "StockOps v0.5.0: 8 agents · 17 skills · 4 broker (dry_run/paper/ibkr/futu 全真接线) · 6 层数据兜底 · 6 家 LLM profile · Web Dashboard + K 线 · 闭环学习 · brew tap 一键装。",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {
@@ -80,6 +80,11 @@
       "name": "dashboard",
       "cmd": "python -m dashboard.server",
       "description": "零依赖 Web 仪表盘 (8765)"
+    },
+    {
+      "name": "broker-health",
+      "cmd": "./manage.py broker-health",
+      "description": "诊断 4 家 broker 连通性"
     }
   ],
   "openclaw": {
