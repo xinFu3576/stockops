@@ -1,0 +1,93 @@
+{
+  "name": "stockops",
+  "version": "0.4.0",
+  "description": "StockOps 股票交易多 agent 团队 v0.4.0 (8 agents, 17 skills)。含 Broker fallback (Paper/IBKR/futu)、LLM Profile (openai/deepseek/kimi/qwen/ark/vllm)、4 层数据兜底 (yahoo/sina/eastmoney/akshare/tushare/wind)、Web Dashboard (K 线图+快捷操作)、闭环学习 adapt、分钟级预警、pytest+CI、brew tap。",
+  "author": "sendy",
+  "skills_dir": "skills",
+  "python": {
+    "root": ".",
+    "venv": ".venv",
+    "requirements": "requirements.txt",
+    "min_version": "3.11"
+  },
+  "entrypoints": [
+    {
+      "name": "daily",
+      "cmd": "./daily.sh",
+      "description": "一键日跑"
+    },
+    {
+      "name": "pipeline",
+      "cmd": "python -m core.orchestrator",
+      "description": "单日决策"
+    },
+    {
+      "name": "batch",
+      "cmd": "python -m tools.batch_runner",
+      "description": "watchlist 批处理"
+    },
+    {
+      "name": "backtest",
+      "cmd": "python -m tools.backtest_cli",
+      "description": "向量化回测"
+    },
+    {
+      "name": "grid",
+      "cmd": "python -m tools.grid_search",
+      "description": "参数网格"
+    },
+    {
+      "name": "verify",
+      "cmd": "python -m tools.verify",
+      "description": "健康检查"
+    },
+    {
+      "name": "reflect",
+      "cmd": "python -m tools.reflect",
+      "description": "回填 realized"
+    },
+    {
+      "name": "adapt",
+      "cmd": "python -m tools.adapt",
+      "description": "闭环学习:更新权重"
+    },
+    {
+      "name": "watch",
+      "cmd": "python -m tools.price_watch",
+      "description": "分钟级价格预警"
+    },
+    {
+      "name": "notify",
+      "cmd": "python -m tools.notify",
+      "description": "飞书/邮件推送"
+    },
+    {
+      "name": "learn",
+      "cmd": "python -m tools.learn",
+      "description": "reflect + adapt 一体化"
+    },
+    {
+      "name": "manage",
+      "cmd": "./manage.py",
+      "description": "统一入口(decide/watch/paper-status/...)"
+    },
+    {
+      "name": "test",
+      "cmd": "python -m pytest tests/",
+      "description": "跑单测"
+    },
+    {
+      "name": "dashboard",
+      "cmd": "python -m dashboard.server",
+      "description": "零依赖 Web 仪表盘 (8765)"
+    }
+  ],
+  "openclaw": {
+    "agents_config_stub": "openclaw_agents.stub.json",
+    "workspace_charter_dir": "openclaw_workspaces"
+  },
+  "docs": [
+    "README.md",
+    "docs/"
+  ]
+}

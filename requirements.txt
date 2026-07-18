@@ -1,0 +1,25 @@
+# Minimal core
+pydantic>=2.6
+pyyaml
+python-dotenv
+httpx
+
+# Data (按需装)
+akshare
+yfinance
+pandas
+numpy
+
+# Optional TA
+# TA-Lib
+
+# Optional quant engines
+# vectorbt
+# backtrader
+# pyqlib
+
+# Optional LLM (choose your stack)
+# openai
+# anthropic
+# instructor
+# langgraph

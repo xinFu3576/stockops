@@ -1,0 +1,57 @@
+{
+  "ticker": "000858.SZ",
+  "decision_ts": "2026-07-18T04:00:51.042532",
+  "decision": {
+    "ticker": "000858.SZ",
+    "as_of": "2026-07-17",
+    "direction": "hold",
+    "score": 57,
+    "confidence": 0.48,
+    "entry_price": 72.76000213623047,
+    "stop_loss": null,
+    "take_profit": null,
+    "horizon_days": 20,
+    "key_points": [
+      "[fundamental] 毛利率 81.4% 具备护城河",
+      "[fundamental] 净利同比 +82.6% 高增速",
+      "[technical] MA20/MA60=-10.94% 中期下行",
+      "[technical] 52 周低位 3%",
+      "[sentiment] 舆情 +0.35 覆盖 18 条",
+      "[sentiment] 主要话题: 业绩, 产品动态, 分红回购",
+      "[macro_event] 宏观 regime: neutral"
+    ],
+    "risks": [
+      "[fundamental] 财务面暂无显著风险，仍需跟踪行业景气",
+      "[technical] 技术面无显著风险，需与基本面互证",
+      "[sentiment] 情绪指标滞后于价格",
+      "[macro_event] 宏观数据缺失，关注 CPI/PPI/PMI",
+      "模型未覆盖极端事件（黑天鹅/停牌/退市）",
+      "数据延迟或缺失可能导致信号失真"
+    ],
+    "catalysts": [
+      "财报窗口",
+      "行业景气度",
+      "CPI/PPI",
+      "美联储议息",
+      "板块政策"
+    ],
+    "checklist": [
+      "确认当日为交易日 & 未停牌",
+      "确认下单前风控三层通过",
+      "确认成本+滑点+印花税已纳入回测口径",
+      "确认存在明确止损/止盈价位"
+    ],
+    "used_analysts": [
+      "fundamental",
+      "technical",
+      "sentiment",
+      "macro_event"
+    ],
+    "used_memory_refs": [
+      "000858.SZ@2026-07-17"
+    ]
+  },
+  "realized_return": null,
+  "alpha_vs_benchmark": null,
+  "reflection": null
+}

@@ -1,0 +1,13 @@
+# 持续跟踪清单;stockops-cron / batch runner 消费此文件
+version: 1
+lists:
+  core:
+    description: 核心持有,每日必看
+    tickers: [600519.SS, 000858.SZ, AAPL, NVDA, 0700.HK]
+  candidates:
+    description: 待选池
+    tickers: [MSFT, GOOG, 0941.HK]
+alert:
+  score_delta_threshold: 8     # 相邻两日评分变动 ≥ 该阈值触发预警
+  confidence_min: 0.55         # 信心 <该值不入 alert
+  risk_block_alert: true       # 只要 pipeline 报 block 就触发

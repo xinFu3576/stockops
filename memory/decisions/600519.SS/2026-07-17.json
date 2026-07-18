@@ -1,0 +1,57 @@
+{
+  "ticker": "600519.SS",
+  "decision_ts": "2026-07-18T07:38:07.044024",
+  "decision": {
+    "ticker": "600519.SS",
+    "as_of": "2026-07-17",
+    "direction": "hold",
+    "score": 52,
+    "confidence": 0.48,
+    "entry_price": 1253.0,
+    "stop_loss": null,
+    "take_profit": null,
+    "horizon_days": 20,
+    "key_points": [
+      "[fundamental] 加权 ROE 10.6%",
+      "[fundamental] 毛利率 89.8% 具备护城河",
+      "[technical] MA5/MA20=+2.32% 短期上翘",
+      "[technical] MA20/MA60=-5.93% 中期下行",
+      "[sentiment] 舆情 +0.38 覆盖 14 条",
+      "[sentiment] 主要话题: 涨价/降价, 机构动作, 产品动态",
+      "[macro_event] 宏观 regime: neutral"
+    ],
+    "risks": [
+      "[fundamental] 财务面暂无显著风险，仍需跟踪行业景气",
+      "[technical] 技术面无显著风险，需与基本面互证",
+      "[sentiment] 情绪指标滞后于价格",
+      "[macro_event] 宏观数据缺失，关注 CPI/PPI/PMI",
+      "模型未覆盖极端事件（黑天鹅/停牌/退市）",
+      "数据延迟或缺失可能导致信号失真"
+    ],
+    "catalysts": [
+      "财报窗口",
+      "行业景气度",
+      "CPI/PPI",
+      "美联储议息",
+      "板块政策"
+    ],
+    "checklist": [
+      "确认当日为交易日 & 未停牌",
+      "确认下单前风控三层通过",
+      "确认成本+滑点+印花税已纳入回测口径",
+      "确认存在明确止损/止盈价位"
+    ],
+    "used_analysts": [
+      "fundamental",
+      "technical",
+      "sentiment",
+      "macro_event"
+    ],
+    "used_memory_refs": [
+      "600519.SS@2026-07-17"
+    ]
+  },
+  "realized_return": null,
+  "alpha_vs_benchmark": null,
+  "reflection": null
+}

@@ -1,0 +1,386 @@
+{
+  "agents": [
+    {
+      "id": "stockops_operator",
+      "name": "股票交易 Operator",
+      "workspace": "{{HOME}}/.openclaw/workspace/workspaces/stockops/00_stockops_operator",
+      "agentDir": "{{HOME}}/.openclaw/workspace/agents/stockops_operator/agent",
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw"
+      },
+      "tools": {
+        "allow": [
+          "read",
+          "write",
+          "edit",
+          "sessions_list",
+          "sessions_history",
+          "sessions_send",
+          "session_status",
+          "sandbox_exec",
+          "sandbox_process"
+        ],
+        "deny": [
+          "message",
+          "exec",
+          "process"
+        ]
+      },
+      "heartbeat": {
+        "every": "4h",
+        "target": "last",
+        "includeSystemPromptSection": true,
+        "prompt": "Heartbeat: 若当前时段属于交易日 09:00-10:30 或 17:30-19:00,先跑一次 daily.sh(见 stockops-cron),把 reports/alert_*.md 摘要上报 main;若已跑过或非交易时段,只做 inbox 巡检,静默即可。"
+      },
+      "skills": [
+        "stockops-shared",
+        "stockops-pipeline",
+        "stockops-verify",
+        "stockops-reflect",
+        "dispatching-parallel-agents",
+        "executing-plans",
+        "writing-plans",
+        "taskflow",
+        "taskflow-inbox-triage",
+        "main-agent-chief-of-staff",
+        "session-logs",
+        "verification-before-completion",
+        "stockops-batch",
+        "stockops-cron",
+        "stockops-alert",
+        "stockops-adapt",
+        "stockops-watch",
+        "stockops-paper",
+        "stockops-learn",
+        "stockops-dashboard",
+        "stockops-llm"
+      ],
+      "model": {
+        "primary": "openai/gpt-5.5",
+        "fallbacks": [
+          "volcengine-plan/ark-code-latest",
+          "openrouter/free",
+          "google/gemini-3.1-pro-preview"
+        ]
+      }
+    },
+    {
+      "id": "stock_data",
+      "name": "股票数据/因子 Agent",
+      "workspace": "{{HOME}}/.openclaw/workspace/workspaces/stockops/11_stock_data",
+      "agentDir": "{{HOME}}/.openclaw/workspace/agents/stock_data/agent",
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw"
+      },
+      "tools": {
+        "allow": [
+          "read",
+          "write",
+          "edit",
+          "sandbox_exec"
+        ],
+        "deny": [
+          "message",
+          "cron",
+          "process"
+        ]
+      },
+      "heartbeat": {
+        "every": "2h",
+        "target": "last",
+        "includeSystemPromptSection": true,
+        "prompt": "Heartbeat: 巡检 inbox、任务、blocker。仅在有实质性状态时上报 stockops_operator/main。"
+      },
+      "skills": [
+        "stockops-shared",
+        "stockops-data",
+        "source-driven-development",
+        "observability-and-instrumentation",
+        "stockops-watch"
+      ],
+      "model": {
+        "primary": "openai/gpt-5.4",
+        "fallbacks": [
+          "volcengine-plan/ark-code-latest",
+          "openrouter/free",
+          "google/gemini-3.1-pro-preview"
+        ]
+      }
+    },
+    {
+      "id": "stock_analyst",
+      "name": "股票分析师团 Agent",
+      "workspace": "{{HOME}}/.openclaw/workspace/workspaces/stockops/12_stock_analyst",
+      "agentDir": "{{HOME}}/.openclaw/workspace/agents/stock_analyst/agent",
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw"
+      },
+      "tools": {
+        "allow": [
+          "read",
+          "write",
+          "edit",
+          "sandbox_exec"
+        ],
+        "deny": [
+          "message",
+          "cron",
+          "process"
+        ]
+      },
+      "heartbeat": {
+        "every": "2h",
+        "target": "last",
+        "includeSystemPromptSection": true,
+        "prompt": "Heartbeat: 巡检 inbox、任务、blocker。仅在有实质性状态时上报 stockops_operator/main。"
+      },
+      "skills": [
+        "stockops-shared",
+        "stockops-pipeline",
+        "doubt-driven-development",
+        "documentation-and-adrs",
+        "stockops-llm"
+      ],
+      "model": {
+        "primary": "openai/gpt-5.5",
+        "fallbacks": [
+          "volcengine-plan/ark-code-latest",
+          "openrouter/free",
+          "google/gemini-3.1-pro-preview"
+        ]
+      }
+    },
+    {
+      "id": "stock_backtest",
+      "name": "股票回测/寻优 Agent",
+      "workspace": "{{HOME}}/.openclaw/workspace/workspaces/stockops/13_stock_backtest",
+      "agentDir": "{{HOME}}/.openclaw/workspace/agents/stock_backtest/agent",
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw"
+      },
+      "tools": {
+        "allow": [
+          "read",
+          "write",
+          "edit",
+          "sandbox_exec",
+          "sandbox_process"
+        ],
+        "deny": [
+          "message",
+          "cron"
+        ]
+      },
+      "heartbeat": {
+        "every": "2h",
+        "target": "last",
+        "includeSystemPromptSection": true,
+        "prompt": "Heartbeat: 巡检 inbox、任务、blocker。仅在有实质性状态时上报 stockops_operator/main。"
+      },
+      "skills": [
+        "stockops-shared",
+        "stockops-backtest",
+        "stockops-grid",
+        "performance-optimization"
+      ],
+      "model": {
+        "primary": "openai/gpt-5.4",
+        "fallbacks": [
+          "volcengine-plan/ark-code-latest",
+          "openrouter/free",
+          "google/gemini-3.1-pro-preview"
+        ]
+      }
+    },
+    {
+      "id": "stock_risk",
+      "name": "股票风控/合规 Agent",
+      "workspace": "{{HOME}}/.openclaw/workspace/workspaces/stockops/14_stock_risk",
+      "agentDir": "{{HOME}}/.openclaw/workspace/agents/stock_risk/agent",
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw"
+      },
+      "tools": {
+        "allow": [
+          "read",
+          "write",
+          "edit",
+          "sandbox_exec"
+        ],
+        "deny": [
+          "message",
+          "cron",
+          "process"
+        ]
+      },
+      "heartbeat": {
+        "every": "2h",
+        "target": "last",
+        "includeSystemPromptSection": true,
+        "prompt": "Heartbeat: 巡检 inbox、任务、blocker。仅在有实质性状态时上报 stockops_operator/main。"
+      },
+      "skills": [
+        "stockops-shared",
+        "stockops-risk",
+        "security-and-hardening",
+        "verification-before-completion"
+      ],
+      "model": {
+        "primary": "openai/gpt-5.4",
+        "fallbacks": [
+          "volcengine-plan/ark-code-latest",
+          "openrouter/free",
+          "google/gemini-3.1-pro-preview"
+        ]
+      }
+    },
+    {
+      "id": "stock_execution",
+      "name": "股票执行 Agent",
+      "workspace": "{{HOME}}/.openclaw/workspace/workspaces/stockops/15_stock_execution",
+      "agentDir": "{{HOME}}/.openclaw/workspace/agents/stock_execution/agent",
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw"
+      },
+      "tools": {
+        "allow": [
+          "read",
+          "write",
+          "edit",
+          "sandbox_exec"
+        ],
+        "deny": [
+          "message",
+          "cron",
+          "process"
+        ]
+      },
+      "heartbeat": {
+        "every": "2h",
+        "target": "last",
+        "includeSystemPromptSection": true,
+        "prompt": "Heartbeat: 巡检待执行委托单,只在 dry_run 差异或异常时上报 stockops_operator。"
+      },
+      "skills": [
+        "stockops-shared",
+        "stockops-pipeline",
+        "incremental-implementation",
+        "shipping-and-launch",
+        "stockops-batch",
+        "stockops-paper"
+      ],
+      "model": {
+        "primary": "openai/gpt-5.4-mini",
+        "fallbacks": [
+          "volcengine-plan/ark-code-latest",
+          "openrouter/free",
+          "google/gemini-3.1-pro-preview"
+        ]
+      }
+    },
+    {
+      "id": "stock_reflection",
+      "name": "股票复盘/记忆 Agent",
+      "workspace": "{{HOME}}/.openclaw/workspace/workspaces/stockops/16_stock_reflection",
+      "agentDir": "{{HOME}}/.openclaw/workspace/agents/stock_reflection/agent",
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw"
+      },
+      "tools": {
+        "allow": [
+          "read",
+          "write",
+          "edit",
+          "sandbox_exec"
+        ],
+        "deny": [
+          "message",
+          "cron",
+          "process"
+        ]
+      },
+      "heartbeat": {
+        "every": "1d",
+        "target": "last",
+        "includeSystemPromptSection": true,
+        "prompt": "Heartbeat: 检查 T-20 到期的 pending decision;有到期就跑 stockops-learn(reflect+adapt --apply),把 configs/weights.yaml 变更摘要上报 stockops_operator。"
+      },
+      "skills": [
+        "stockops-shared",
+        "stockops-reflect",
+        "context-engineering",
+        "documentation-and-adrs",
+        "stockops-adapt",
+        "stockops-learn"
+      ],
+      "model": {
+        "primary": "openai/gpt-5.4",
+        "fallbacks": [
+          "volcengine-plan/ark-code-latest",
+          "openrouter/free",
+          "google/gemini-3.1-pro-preview"
+        ]
+      }
+    },
+    {
+      "id": "stock_observability",
+      "name": "股票可观测 Agent",
+      "workspace": "{{HOME}}/.openclaw/workspace/workspaces/stockops/17_stock_observability",
+      "agentDir": "{{HOME}}/.openclaw/workspace/agents/stock_observability/agent",
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw"
+      },
+      "tools": {
+        "allow": [
+          "read",
+          "write",
+          "edit",
+          "sandbox_exec"
+        ],
+        "deny": [
+          "message",
+          "cron",
+          "process"
+        ]
+      },
+      "heartbeat": {
+        "every": "12h",
+        "target": "last",
+        "includeSystemPromptSection": true,
+        "prompt": "Heartbeat: 跑 stockops-verify,红叉才上报 stockops_operator。"
+      },
+      "skills": [
+        "stockops-shared",
+        "stockops-verify",
+        "observability-and-instrumentation",
+        "healthcheck-audit",
+        "stockops-alert",
+        "stockops-dashboard"
+      ],
+      "model": {
+        "primary": "openai/gpt-5.4-mini",
+        "fallbacks": [
+          "volcengine-plan/ark-code-latest",
+          "openrouter/free",
+          "google/gemini-3.1-pro-preview"
+        ]
+      }
+    }
+  ]
+}

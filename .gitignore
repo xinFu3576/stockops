@@ -1,0 +1,13 @@
+.venv/
+.cache/
+__pycache__/
+*/__pycache__/
+.pytest_cache/
+data/paper/
+data/batch_state/
+data/price_watch/
+data/memory/
+reports/
+*.pyc
+.env
+*.bak2
