@@ -35,3 +35,19 @@ def write_memory(dec: Decision | None) -> None:
     fname = f"{dec.as_of.isoformat()}.json"
     with open(os.path.join(p, fname), "w") as fh:
         fh.write(rec.model_dump_json(indent=2))
+
+
+def iter_records():
+    """全量遍历 memory/decisions，供 A/B 回放使用。返回 dict 迭代器。"""
+    if not os.path.isdir(MEM_DIR):
+        return
+    for tk in os.listdir(MEM_DIR):
+        d = os.path.join(MEM_DIR, tk)
+        if not os.path.isdir(d): continue
+        for f in sorted(os.listdir(d)):
+            fp = os.path.join(d, f)
+            try:
+                with open(fp) as fh:
+                    yield json.loads(fh.read())
+            except Exception:
+                continue

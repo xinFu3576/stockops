@@ -96,15 +96,33 @@ def iv_skew_proxy(md: MarketData) -> Optional[float]:
 
 
 def compute_microstructure_bundle(md: MarketData) -> dict:
-    """一次算完 6 个微结构因子,输出到 factor bundle。"""
-    return {
+    """一次算完 6 个微结构因子,输出到 factor bundle。
+
+    v0.9.0：iv_skew 优先用真 options chain，无 key 则退到 realized-vol 代理。
+    """
+    out = {
         "ofi_5d": order_flow_imbalance(md, 5),
         "ofi_20d": order_flow_imbalance(md, 20),
         "amihud_illiquidity": amihud_illiquidity(md),
         "rv_expansion": realized_volatility_5d_vs_20d(md),
         "volume_skew": volume_profile_skew(md),
-        "iv_skew_proxy": iv_skew_proxy(md),
     }
+    # 真 IV skew 三级降级
+    try:
+        from tools.options_chain import fetch_options_skew
+        os_r = fetch_options_skew(md.ticker)
+        if os_r and os_r.iv_skew is not None:
+            out["iv_skew"] = os_r.iv_skew
+            out["iv_skew_source"] = os_r.source
+            out["put_call_ratio"] = os_r.put_call_ratio
+        else:
+            out["iv_skew"] = iv_skew_proxy(md)
+            out["iv_skew_source"] = "proxy"
+    except Exception:
+        out["iv_skew"] = iv_skew_proxy(md)
+        out["iv_skew_source"] = "proxy"
+    out["iv_skew_proxy"] = iv_skew_proxy(md)  # 兼容
+    return out
 
 
 if __name__ == "__main__":

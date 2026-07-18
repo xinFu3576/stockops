@@ -99,6 +99,7 @@ def cmd_paper_reset(a):
 def cmd_broker_health(a):
     import asyncio, json
     from tools.brokers import get_broker
+    from tools.options_chain import health as opt_health
     names = a.brokers.split(",") if a.brokers else ["dry_run","paper","ibkr","futu"]
     async def _run():
         for n in names:
@@ -106,6 +107,7 @@ def cmd_broker_health(a):
             h = await b.health() if hasattr(b, "health") else {"ok": True, "reason": "no health() method"}
             print(f"{n:>10s}: {json.dumps(h, ensure_ascii=False)}")
     asyncio.run(_run())
+    print(f"\n[options] 数据源: {json.dumps(opt_health(), ensure_ascii=False)}")
     return 0
 
 
@@ -145,6 +147,89 @@ def cmd_status(a):
     print(f"历史报告: {n_rpt} 份")
     return 0
 
+
+
+
+def cmd_rebalance(a):
+    """演示模式:根据现有 memory 决策 + 当前持仓生成 rebalance orders。"""
+    import json, pathlib
+    from datetime import date, timedelta
+    from tools.memory import iter_records
+    from tools.rebalance import Position, compute_target_weights, build_rebalance_plan
+    from core.schemas import Direction
+
+    # 用最近 N 天最新决策
+    since = date.today() - timedelta(days=a.days)
+    latest = {}
+    for r in iter_records():
+        dec = r.get("decision") or {}
+        tk = dec.get("ticker"); as_of = dec.get("as_of")
+        if not tk or not as_of: continue
+        d = as_of if hasattr(as_of, "isoformat") else as_of
+        if isinstance(d, str):
+            from datetime import datetime as _dt
+            d = _dt.fromisoformat(d[:10]).date()
+        if d < since: continue
+        if tk not in latest or d > latest[tk][0]:
+            from core.schemas import Decision as _D
+            try:
+                latest[tk] = (d, _D(**dec))
+            except Exception:
+                pass
+    decisions = {tk: rec[1] for tk, rec in latest.items()}
+    if not decisions:
+        print(f"[rebalance] 近 {a.days} 天无决策记录")
+        return 0
+    weights = compute_target_weights(decisions, method=a.method,
+                                     max_single=a.max_single, cash_floor=a.cash_floor)
+    print(f"[rebalance] 目标权重 ({a.method}):")
+    for tk, w in sorted(weights.items(), key=lambda x: -abs(x[1])):
+        print(f"  {tk:>12s}: {w:+.2%}")
+
+    if a.positions and pathlib.Path(a.positions).exists():
+        pos_raw = json.loads(pathlib.Path(a.positions).read_text())
+        positions = {p["ticker"]: Position(**p) for p in pos_raw}
+    else:
+        positions = {}
+    if a.prices and pathlib.Path(a.prices).exists():
+        prices = json.loads(pathlib.Path(a.prices).read_text())
+    else:
+        prices = {tk: (p.market_price or p.avg_cost) for tk, p in positions.items()}
+
+    plan = build_rebalance_plan(weights, positions, prices, a.equity, a.tolerance)
+    print(f"\n[rebalance] orders ({len(plan.orders)}):")
+    for o in plan.orders:
+        print(f"  {o.side:>4s} {o.ticker:>12s} qty={o.qty:>6d} @ {o.price}  [{o.tag}]")
+    print(f"\n[rebalance] reasons ({len(plan.reasons)}):")
+    for r in plan.reasons: print(f"  - {r}")
+    return 0
+
+
+def cmd_options_skew(a):
+    from tools.options_chain import fetch_options_skew, health
+    print(f"[options] 数据源健康: {health()}")
+    for tk in (a.tickers.split(",") if a.tickers else ["AAPL","TSLA","SPY"]):
+        r = fetch_options_skew(tk.strip())
+        if r:
+            print(f"  {tk:>8s} [{r.source}] skew={r.iv_skew:+.4f if r.iv_skew else 'None'}  "
+                  f"pc_ratio={r.put_call_ratio}  spot={r.spot}  n={r.n_contracts}")
+        else:
+            print(f"  {tk:>8s} 无 API key，将退回 proxy")
+    return 0
+
+
+def cmd_ab(a):
+    import json, urllib.request
+    # 直接调用 dashboard 端点，或本地重放
+    from urllib.parse import urlencode
+    from dashboard.server import _ab_sync
+    params = {}
+    if a.a: params["a"] = [a.a]
+    if a.b: params["b"] = [a.b]
+    params["days"] = [str(a.days)]
+    r = _ab_sync(params)
+    print(json.dumps(r, ensure_ascii=False, indent=2, default=str))
+    return 0
 
 def main():
     ap = argparse.ArgumentParser()
@@ -195,6 +280,18 @@ def main():
     p = sub.add_parser("dashboard"); p.add_argument("--port", type=int, default=8765); p.set_defaults(fn=cmd_dashboard)
     p = sub.add_parser("broker-health"); p.add_argument("--brokers", default="dry_run,paper,ibkr,futu"); p.set_defaults(fn=cmd_broker_health)
     p = sub.add_parser("investment-news"); p.add_argument("--sources"); p.add_argument("--keywords"); p.add_argument("--tickers"); p.add_argument("--top",type=int,default=30); p.add_argument("--save",action="store_true"); p.add_argument("--notify",action="store_true"); p.set_defaults(fn=cmd_news)
+    p = sub.add_parser("rebalance")
+    p.add_argument("--method", default="kelly", choices=["kelly","equal","risk_parity"])
+    p.add_argument("--days", type=int, default=30)
+    p.add_argument("--max-single", dest="max_single", type=float, default=0.20)
+    p.add_argument("--cash-floor", dest="cash_floor", type=float, default=0.10)
+    p.add_argument("--equity", type=float, default=100000.0)
+    p.add_argument("--tolerance", type=float, default=0.05)
+    p.add_argument("--positions", help="JSON 文件路径 [{ticker, qty, avg_cost, market_price}]")
+    p.add_argument("--prices", help="JSON 文件路径 {ticker: price}")
+    p.set_defaults(fn=cmd_rebalance)
+    p = sub.add_parser("options-skew"); p.add_argument("--tickers"); p.set_defaults(fn=cmd_options_skew)
+    p = sub.add_parser("ab"); p.add_argument("--a"); p.add_argument("--b"); p.add_argument("--days", type=int, default=60); p.set_defaults(fn=cmd_ab)
     sub.add_parser("test").set_defaults(fn=cmd_test)
     sub.add_parser("status").set_defaults(fn=cmd_status)
 

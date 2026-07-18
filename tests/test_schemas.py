@@ -42,6 +42,7 @@ def test_microstructure_bundle():
     out = compute_microstructure_bundle(md)
     assert "ofi_5d" in out and "iv_skew_proxy" in out
     for k, v in out.items():
+        if isinstance(v, str): continue
         assert v is None or -2 <= v <= 2, f"{k}={v} out of sane range"
 
 

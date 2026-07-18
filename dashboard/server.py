@@ -71,7 +71,7 @@ HTML = """<!DOCTYPE html><html><head><meta charset="utf-8">
   .log{max-height:280px;overflow-y:auto}
 </style></head><body>
 <h1>📈 StockOps · 团队仪表盘 <small style="color:#7d8590">v0.6.0</small></h1>
-<div style="margin-bottom:16px"><input id="chartTk" placeholder="600519.SS" size="20"/><button onclick="window.open('/chart/'+encodeURIComponent(document.getElementById('chartTk').value||'AAPL'),'_blank')" style="background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">🕯 打开 K 线</button><input id="cmpTk" placeholder="AAPL,600519.SS,0700.HK" size="30" style="margin-left:16px"/><button onclick="window.open('/compare/'+encodeURIComponent(document.getElementById('cmpTk').value||'AAPL,600519.SS'),'_blank')" style="background:#8957e5;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">📊 网格对比</button><input id="btTk" placeholder="AAPL" size="20" style="margin-left:16px"/><button onclick="window.open('/equity/'+encodeURIComponent(document.getElementById('btTk').value||'AAPL'),'_blank')" style="background:#3fb950;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">📈 回测曲线</button><a href="/pnl" style="margin-left:16px;color:#f0883e">💰 P&L 归因</a><a href="/news" style="margin-left:16px;color:#f0883e">🗞 情报</a></div>
+<div style="margin-bottom:16px"><input id="chartTk" placeholder="600519.SS" size="20"/><button onclick="window.open('/chart/'+encodeURIComponent(document.getElementById('chartTk').value||'AAPL'),'_blank')" style="background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">🕯 打开 K 线</button><input id="cmpTk" placeholder="AAPL,600519.SS,0700.HK" size="30" style="margin-left:16px"/><button onclick="window.open('/compare/'+encodeURIComponent(document.getElementById('cmpTk').value||'AAPL,600519.SS'),'_blank')" style="background:#8957e5;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">📊 网格对比</button><input id="btTk" placeholder="AAPL" size="20" style="margin-left:16px"/><button onclick="window.open('/equity/'+encodeURIComponent(document.getElementById('btTk').value||'AAPL'),'_blank')" style="background:#3fb950;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">📈 回测曲线</button><a href="/pnl" style="margin-left:16px;color:#f0883e">💰 P&L 归因</a><a href="/news" style="margin-left:16px;color:#f0883e">🗞 情报</a><a href="/ab" style="margin-left:16px;color:#f0883e">🧪 A/B</a></div>
 <div class="grid">
   <div class="card"><h3>项目状态</h3><div id="status"></div></div>
   <div class="card"><h3>因子权重</h3><pre id="weights"></pre></div>
@@ -677,8 +677,166 @@ class Handler(BaseHTTPRequestHandler):
             data = _news_sync(parse_qs(u.query))
             return self._send(200, json.dumps(data, default=str, ensure_ascii=False).encode("utf-8"),
                               "application/json; charset=utf-8")
+        if u.path == "/ab":
+            return self._send(200, AB_HTML)
+        if u.path == "/api/ab":
+            data = _ab_sync(parse_qs(u.query))
+            return self._send(200, json.dumps(data, default=str, ensure_ascii=False).encode("utf-8"),
+                              "application/json; charset=utf-8")
         return self._send(404, "not found", "text/plain")
 
+# ============== A/B 实验对比（v0.9.0） ==============
+def _ab_sync(params: dict) -> dict:
+    """跑两组权重的历史决策对比：读 memory 里所有 decisions，用 A、B 两组权重重放，比较累计收益/胜率。"""
+    from tools.adapt import load_weights, DEFAULT_WEIGHTS, ANALYSTS
+    from tools.memory import iter_records
+    from core.schemas import Direction
+    from datetime import date, timedelta
+
+    a_raw = params.get("a", [None])[0] or ""
+    b_raw = params.get("b", [None])[0] or ""
+    days = int((params.get("days", ["60"])[0]) or "60")
+
+    def _parse(s: str, default: dict) -> dict:
+        try:
+            if not s: return default
+            parts = dict(kv.split(":") for kv in s.split(","))
+            return {k: float(parts.get(k, default[k])) for k in ANALYSTS}
+        except Exception:
+            return default
+
+    wA = _parse(a_raw, load_weights())
+    wB = _parse(b_raw, DEFAULT_WEIGHTS)
+
+    _DIR = {Direction.STRONG_BUY: 1.0, Direction.BUY: 0.5, Direction.HOLD: 0.0,
+            Direction.SELL: -0.5, Direction.STRONG_SELL: -1.0}
+
+    since = date.today() - timedelta(days=days)
+    recs = []
+    try:
+        for r in iter_records():
+            if r.get("decision", {}).get("as_of"):
+                d = r["decision"]["as_of"]
+                if isinstance(d, str):
+                    from datetime import datetime
+                    d = datetime.fromisoformat(d[:10]).date()
+                if d < since: continue
+                recs.append(r)
+    except Exception:
+        pass
+
+    def _replay(w: dict) -> dict:
+        wins = 0; total = 0; ret_sum = 0.0
+        by_analyst = {a: {"w":0,"n":0} for a in ANALYSTS}
+        for r in recs:
+            v = r.get("verdicts") or {}
+            if not v: continue
+            score = 0.0; tot_w = 0.0
+            for name, verd in v.items():
+                if name not in w: continue
+                dir_ = verd.get("direction")
+                if not dir_: continue
+                try:
+                    dir_e = Direction(dir_)
+                except Exception:
+                    continue
+                s = _DIR.get(dir_e, 0.0) * verd.get("confidence", 0.5)
+                score += s * w[name]
+                tot_w += w[name]
+            pred = "buy" if score > 0.05 else ("sell" if score < -0.05 else "hold")
+            realized = r.get("realized_return")
+            if realized is None: continue
+            total += 1
+            # 简化: pred=buy 收 realized，sell 收 -realized，hold 收 0
+            pnl = realized if pred == "buy" else (-realized if pred == "sell" else 0)
+            ret_sum += pnl
+            if pnl > 0: wins += 1
+        return {
+            "n": total, "wins": wins,
+            "win_rate": round(wins/total, 3) if total else None,
+            "total_return": round(ret_sum, 4),
+            "avg_return": round(ret_sum/total, 4) if total else None,
+        }
+
+    resA, resB = _replay(wA), _replay(wB)
+    winner = "A" if (resA.get("avg_return") or 0) > (resB.get("avg_return") or 0) else "B"
+    return {
+        "since": since.isoformat(), "days": days,
+        "weights_A": wA, "weights_B": wB,
+        "result_A": resA, "result_B": resB,
+        "winner": winner if resA["n"] and resB["n"] else "N/A",
+        "n_samples": resA["n"],
+    }
+
+
+AB_HTML = """<!doctype html><html><head><meta charset="utf-8"><title>A/B 实验对比</title>
+<style>body{font-family:-apple-system,SF Pro,sans-serif;background:#0d1117;color:#e6edf3;padding:20px}
+h1{color:#58a6ff}h2{color:#f0883e}
+.row{display:flex;gap:20px;margin:16px 0}
+.card{flex:1;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px}
+.win{border:2px solid #3fb950}
+label{display:block;color:#8b949e;margin:8px 0 4px}
+input{background:#0d1117;color:#e6edf3;border:1px solid #30363d;padding:6px;border-radius:4px;width:100%}
+button{background:#238636;color:#fff;border:0;padding:10px 20px;border-radius:5px;cursor:pointer;font-size:14px;margin-top:10px}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{padding:6px 10px;text-align:left;border-bottom:1px solid #30363d}
+.metric{font-size:24px;color:#3fb950}.neg{color:#f85149}
+.pill{padding:2px 8px;border-radius:10px;font-size:12px}
+.pill.a{background:#1f6feb}.pill.b{background:#8957e5}
+a{color:#58a6ff}
+</style></head><body>
+<h1>🧪 A/B 实验对比 · StockOps</h1>
+<p style="color:#8b949e">重放 memory 里的历史决策，比较两组分析师权重的累计收益/胜率。格式：<code>technical:0.4,fundamental:0.3,sentiment:0.1,macro_event:0.2</code></p>
+<div class="row">
+  <div class="card">
+    <label>方案 A（默认=当前 configs/weights.yaml）</label>
+    <input id="wA" placeholder="technical:0.35,fundamental:0.30,sentiment:0.15,macro_event:0.20"/>
+  </div>
+  <div class="card">
+    <label>方案 B（默认=硬编码 default）</label>
+    <input id="wB" placeholder="technical:0.40,fundamental:0.25,sentiment:0.20,macro_event:0.15"/>
+  </div>
+  <div class="card" style="flex:0.5">
+    <label>回看天数</label>
+    <input id="days" value="60" type="number"/>
+    <button onclick="run()">▶ 开跑</button>
+  </div>
+</div>
+<div id="results"></div>
+<div style="margin-top:20px"><a href="/">← 返回主页</a> · <a href="/news">情报</a></div>
+<script>
+async function run(){
+  const wA = document.getElementById('wA').value;
+  const wB = document.getElementById('wB').value;
+  const days = document.getElementById('days').value || '60';
+  const params = new URLSearchParams({a:wA, b:wB, days});
+  document.getElementById('results').innerHTML = '<p style="color:#8b949e">跑中...</p>';
+  const r = await fetch('/api/ab?' + params).then(r=>r.json());
+  const html = `
+    <h2>结果 · 样本数=${r.n_samples} · 起始=${r.since}</h2>
+    <div class="row">
+      <div class="card ${r.winner==='A'?'win':''}">
+        <span class="pill a">方案 A ${r.winner==='A'?' 🏆':''}</span>
+        <p>累计收益 <span class="metric ${r.result_A.total_return>=0?'':'neg'}">${(r.result_A.total_return*100).toFixed(2)}%</span></p>
+        <table><tr><th>胜率</th><td>${r.result_A.win_rate!==null?(r.result_A.win_rate*100).toFixed(1)+'%':'N/A'}</td></tr>
+        <tr><th>平均单次</th><td>${r.result_A.avg_return!==null?(r.result_A.avg_return*100).toFixed(3)+'%':'N/A'}</td></tr>
+        <tr><th>样本</th><td>${r.result_A.n}</td></tr>
+        <tr><th>权重</th><td><pre style="margin:0;font-size:11px">${JSON.stringify(r.weights_A,null,2)}</pre></td></tr></table>
+      </div>
+      <div class="card ${r.winner==='B'?'win':''}">
+        <span class="pill b">方案 B ${r.winner==='B'?' 🏆':''}</span>
+        <p>累计收益 <span class="metric ${r.result_B.total_return>=0?'':'neg'}">${(r.result_B.total_return*100).toFixed(2)}%</span></p>
+        <table><tr><th>胜率</th><td>${r.result_B.win_rate!==null?(r.result_B.win_rate*100).toFixed(1)+'%':'N/A'}</td></tr>
+        <tr><th>平均单次</th><td>${r.result_B.avg_return!==null?(r.result_B.avg_return*100).toFixed(3)+'%':'N/A'}</td></tr>
+        <tr><th>样本</th><td>${r.result_B.n}</td></tr>
+        <tr><th>权重</th><td><pre style="margin:0;font-size:11px">${JSON.stringify(r.weights_B,null,2)}</pre></td></tr></table>
+      </div>
+    </div>
+    <p style="color:#8b949e">回看天数 ${r.days} · winner=<b style="color:#3fb950">${r.winner}</b></p>
+  `;
+  document.getElementById('results').innerHTML = html;
+}
+</script></body></html>"""
 
 def main():
     ap = argparse.ArgumentParser()

@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.8.0",
-  "description": "StockOps 股票交易多 agent 团队 v0.8.0 · 情感闭环 + 3 新源(华尔街见闻/微博/X) + WeCom 美化模板",
+  "version": "0.9.0",
+  "description": "StockOps v0.9.0 · 真 options chain (Tradier/Polygon) + 组合再平衡引擎 (Kelly/Equal/RiskParity) + Dashboard A/B 实验对比页 + BREW_TAP_TOKEN 自动 bump brew",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {
