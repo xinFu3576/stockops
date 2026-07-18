@@ -9,6 +9,8 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      HAS_BREW_TAP: ${{ secrets.BREW_TAP_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -49,7 +51,7 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
       - name: Bump brew tap
-        if: ${{ secrets.BREW_TAP_TOKEN != '' }}
+        if: env.HAS_BREW_TAP == 'true'
         env:
           BREW_TOKEN: ${{ secrets.BREW_TAP_TOKEN }}
           VERSION: ${{ steps.pack.outputs.version }}
