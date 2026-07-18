@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.15.0",
-  "description": "StockOps v0.15.0 · Live IBKR/Futu 下单闸门 + advise --lang zh/en + debate 冲突分 + daily.sh 自动归档 + KB(local/Notion/Confluence/GH)",
+  "version": "0.15.1",
+  "description": "StockOps v0.15.1 · fix investment_news 模块级 def 顺序 + kb-archive pathlib import",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {

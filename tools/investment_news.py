@@ -410,10 +410,6 @@ async def _cli():
         print(f"[notify] {r}")
 
 
-if __name__ == "__main__":
-    asyncio.run(_cli())
-
-
 # ============== v0.8.0 新增数据源 ==============
 
 async def fetch_wallstreetcn(client: httpx.AsyncClient) -> list[dict]:
@@ -509,3 +505,7 @@ async def fetch_x_stub(client: httpx.AsyncClient) -> list[dict]:
         except Exception:
             continue
     return []
+
+
+if __name__ == "__main__":
+    asyncio.run(_cli())

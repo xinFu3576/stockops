@@ -1,29 +1,29 @@
 {
-  "ticker": "AAPL",
-  "decision_ts": "2026-07-18T10:13:16.943600",
+  "ticker": "NVDA",
+  "decision_ts": "2026-07-18T10:12:35.229640",
   "decision": {
-    "ticker": "AAPL",
+    "ticker": "NVDA",
     "as_of": "2026-07-18",
     "direction": "hold",
-    "score": 54,
-    "confidence": 0.41,
-    "entry_price": 333.739990234375,
-    "stop_loss": 317.229,
-    "take_profit": 350.251,
+    "score": 50,
+    "confidence": 0.37,
+    "entry_price": 202.80999755859375,
+    "stop_loss": 188.116,
+    "take_profit": 217.504,
     "horizon_days": 20,
     "key_points": [
       "[fundamental] 非 A 股或无 F10 数据，以价格趋势代理",
-      "[fundamental] 20 日涨幅 +12.8%",
-      "[technical] MA5/MA20=+6.49% 短期上翘",
+      "[technical] MA5/MA20=+2.71% 短期上翘",
+      "[technical] MA20/MA60=-3.28% 中期下行",
       "[sentiment] 舆情 +0.00 覆盖 0 条",
       "[macro_event] 宏观 regime: neutral",
       "[portfolio_view] [综合] options / 微结构因子缺失，转由技术+基本面主导",
       "[情报] 情绪中性 avg=-0.002 (n=442)",
-      "[辩论] 分析师方向存在分歧 (冲突分 37/100)"
+      "[辩论] 分析师方向存在分歧 (冲突分 40/100)"
     ],
     "risks": [
       "[fundamental] 未接入财报数据",
-      "[technical] RSI=88.6 超买",
+      "[technical] 技术面无显著风险，需与基本面互证",
       "[sentiment] 情绪指标滞后于价格",
       "[macro_event] 宏观数据缺失，关注 CPI/PPI/PMI",
       "[portfolio_view] [综合] 综合信号中性，参考单因子分析师意见",
@@ -52,8 +52,7 @@
       "portfolio_view"
     ],
     "used_memory_refs": [
-      "AAPL@2026-07-17",
-      "AAPL@2026-07-18"
+      "NVDA@2026-07-17"
     ]
   },
   "realized_return": null,

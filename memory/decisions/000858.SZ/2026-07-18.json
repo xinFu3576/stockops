@@ -1,29 +1,29 @@
 {
-  "ticker": "AAPL",
-  "decision_ts": "2026-07-18T10:13:16.943600",
+  "ticker": "000858.SZ",
+  "decision_ts": "2026-07-18T10:12:41.506632",
   "decision": {
-    "ticker": "AAPL",
+    "ticker": "000858.SZ",
     "as_of": "2026-07-18",
     "direction": "hold",
     "score": 54,
-    "confidence": 0.41,
-    "entry_price": 333.739990234375,
-    "stop_loss": 317.229,
-    "take_profit": 350.251,
+    "confidence": 0.44,
+    "entry_price": 72.76000213623047,
+    "stop_loss": 68.15,
+    "take_profit": 77.37,
     "horizon_days": 20,
     "key_points": [
-      "[fundamental] 非 A 股或无 F10 数据，以价格趋势代理",
-      "[fundamental] 20 日涨幅 +12.8%",
-      "[technical] MA5/MA20=+6.49% 短期上翘",
+      "[fundamental] 毛利率 81.4% 具备护城河",
+      "[fundamental] 净利同比 +82.6% 高增速",
+      "[technical] MA20/MA60=-10.94% 中期下行",
+      "[technical] 52 周低位 3%",
       "[sentiment] 舆情 +0.00 覆盖 0 条",
       "[macro_event] 宏观 regime: neutral",
       "[portfolio_view] [综合] options / 微结构因子缺失，转由技术+基本面主导",
-      "[情报] 情绪中性 avg=-0.002 (n=442)",
-      "[辩论] 分析师方向存在分歧 (冲突分 37/100)"
+      "[情报] 情绪中性 avg=-0.002 (n=442)"
     ],
     "risks": [
-      "[fundamental] 未接入财报数据",
-      "[technical] RSI=88.6 超买",
+      "[fundamental] 财务面暂无显著风险，仍需跟踪行业景气",
+      "[technical] 技术面无显著风险，需与基本面互证",
       "[sentiment] 情绪指标滞后于价格",
       "[macro_event] 宏观数据缺失，关注 CPI/PPI/PMI",
       "[portfolio_view] [综合] 综合信号中性，参考单因子分析师意见",
@@ -52,8 +52,7 @@
       "portfolio_view"
     ],
     "used_memory_refs": [
-      "AAPL@2026-07-17",
-      "AAPL@2026-07-18"
+      "000858.SZ@2026-07-17"
     ]
   },
   "realized_return": null,

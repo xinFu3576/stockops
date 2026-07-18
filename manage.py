@@ -264,6 +264,7 @@ def cmd_ab(a):
 def cmd_kb_archive(a):
     """把指定 md 文件 (advise 输出) 归档到知识库。用法: kb-archive path.md [--date YYYY-MM-DD]"""
     from datetime import date
+    import pathlib
     from tools.knowledge_base import archive_daily_advise
     body = pathlib.Path(a.path).read_text(encoding="utf-8")
     as_of = date.fromisoformat(a.date) if a.date else date.today()
