@@ -10,7 +10,7 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     env:
-      HAS_BREW_TAP: ${{ secrets.BREW_TAP_TOKEN != '' }}
+      HAS_BREW_TAP: ${{ secrets.BREW_TAP_DEPLOY_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,14 +53,18 @@ jobs:
       - name: Bump brew tap
         if: env.HAS_BREW_TAP == 'true'
         env:
-          BREW_TOKEN: ${{ secrets.BREW_TAP_TOKEN }}
           VERSION: ${{ steps.pack.outputs.version }}
           SHA: ${{ steps.pack.outputs.sha256 }}
         run: |
           set -euo pipefail
-          git clone "https://x-access-token:$BREW_TOKEN@github.com/${{ github.repository_owner }}/homebrew-stockops.git" /tmp/tap
+          mkdir -p ~/.ssh
+          echo "${{ secrets.BREW_TAP_DEPLOY_KEY }}" > ~/.ssh/tap_key
+          chmod 600 ~/.ssh/tap_key
+          ssh-keyscan github.com > ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap_key -o UserKnownHostsFile=~/.ssh/known_hosts"
+          git clone git@github.com:${{ github.repository_owner }}/homebrew-stockops.git /tmp/tap
           cd /tmp/tap
-          python3 - <<PY
+          python3 - <<'PY'
           import re, pathlib, os
           v = os.environ["VERSION"]; sha = os.environ["SHA"]
           p = pathlib.Path("Formula/stockops.rb"); s = p.read_text()
