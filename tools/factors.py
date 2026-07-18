@@ -124,6 +124,17 @@ def compute_factors(md: MarketData | None,
             if isinstance(v, (int, float)) and k not in ("as_of",):
                 add(f"fund_{k}", v, "fundamental")
 
+
+    # ---- 微结构因子(v0.6) ----
+    try:
+        from tools.microstructure import compute_microstructure_bundle
+        micro = compute_microstructure_bundle(md)
+        for k, v in micro.items():
+            if v is not None:
+                add(k, v, "microstructure")
+    except Exception:
+        pass
+
     return FactorBundle(ticker=md.ticker, as_of=md.as_of, factors=factors, pit_verified=True)
 
 

@@ -431,7 +431,7 @@ def _pnl_sync() -> dict:
         last = cost_p
         if fetch_market_data:
             try:
-                md = asyncio.run(fetch_market_data(tk, _d.today(), lookback=30))
+                md = asyncio.run(fetch_market_data(tk, _d.today(), lookback=5))
                 last = md.bars[-1].close
             except Exception: pass
         mkt = qty * last

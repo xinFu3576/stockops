@@ -1,0 +1,74 @@
+name: stockops-release
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install & test
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt pytest pytest-asyncio
+          pytest tests/ -v --tb=short
+      - name: Pack
+        id: pack
+        run: |
+          set -euo pipefail
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          STAGE="$RUNNER_TEMP/stage"
+          rm -rf "$STAGE" && mkdir -p "$STAGE/stock-agents-team"
+          rsync -a \
+            --exclude='.venv' --exclude='.git' --exclude='.cache' \
+            --exclude='__pycache__' --exclude='*/__pycache__' \
+            --exclude='data/paper' --exclude='data/batch_state' \
+            --exclude='data/price_watch' --exclude='reports' \
+            --exclude='.pytest_cache' \
+            "$GITHUB_WORKSPACE"/ "$STAGE/stock-agents-team/"
+          TAR="$RUNNER_TEMP/stockops-$VERSION.tar.gz"
+          tar -C "$STAGE" -czf "$TAR" stock-agents-team
+          ls -lh "$TAR"
+          SHA=$(sha256sum "$TAR" | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "tarball=$TAR" >> "$GITHUB_OUTPUT"
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.tarball }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+      - name: Bump brew tap
+        if: ${{ secrets.BREW_TAP_TOKEN != '' }}
+        env:
+          BREW_TOKEN: ${{ secrets.BREW_TAP_TOKEN }}
+          VERSION: ${{ steps.pack.outputs.version }}
+          SHA: ${{ steps.pack.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:$BREW_TOKEN@github.com/${{ github.repository_owner }}/homebrew-stockops.git" /tmp/tap
+          cd /tmp/tap
+          python3 - <<PY
+          import re, pathlib, os
+          v = os.environ["VERSION"]; sha = os.environ["SHA"]
+          p = pathlib.Path("Formula/stockops.rb"); s = p.read_text()
+          s = re.sub(r'v\d+\.\d+\.\d+/stockops-\d+\.\d+\.\d+\.tar\.gz',
+                     f'v{v}/stockops-{v}.tar.gz', s)
+          s = re.sub(r'sha256 "[a-f0-9]+"', f'sha256 "{sha}"', s)
+          s = re.sub(r'version "\d+\.\d+\.\d+"', f'version "{v}"', s)
+          p.write_text(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/stockops.rb
+          git diff --cached --quiet || (git commit -m "stockops $VERSION" && git push)

@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.5.0",
-  "description": "StockOps v0.5.0: 8 agents · 17 skills · 4 broker (dry_run/paper/ibkr/futu 全真接线) · 6 层数据兜底 · 6 家 LLM profile · Web Dashboard + K 线 · 闭环学习 · brew tap 一键装。",
+  "version": "0.6.0",
+  "description": "StockOps v0.6.0: 8 agents · 17 skills · 4 broker 全真接线 · 6 层数据兜底 · 6 LLM profile · 6 微结构因子(OFI/IV skew/Amihud) · Dashboard 4 视图(K 线+网格对比+回测曲线+P&L 归因) · GitHub Actions 自动 Release + brew bump · 12/12 tests",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {
