@@ -82,7 +82,7 @@ class AltSignal(BaseModel):
 class FactorValue(BaseModel):
     name: str
     value: float
-    category: Literal["price_volume", "fundamental", "sentiment", "event", "chips"]
+    category: Literal["price_volume", "fundamental", "sentiment", "event", "chips", "microstructure", "options"]
     used_data_ts: date
     ic_hint: Optional[float] = None
 

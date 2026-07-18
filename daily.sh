@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# StockOps 一键日跑:pipeline(watchlist=core) + reflect + verify + 预警
+# StockOps v0.11.0 一键日跑：情报 → pipeline → 建议 → rebalance → 推送
 # 用法: ./daily.sh [YYYY-MM-DD]  默认今天
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -9,21 +9,36 @@ export ALL_PROXY="${ALL_PROXY:-socks5://127.0.0.1:7890}" \
        HTTP_PROXY="${HTTP_PROXY:-socks5://127.0.0.1:7890}"
 
 DATE="${1:-$(date +%F)}"
-echo "==[stockops daily] $DATE=="
+WATCH="${WATCH:-600519.SS,000858.SZ,AAPL,NVDA,0700.HK}"
+EQUITY="${EQUITY:-500000}"
 
+echo "==[stockops daily $DATE] watch=$WATCH equity=$EQUITY=="
 
-echo "-- 0/4 news (拉取当日热点情报) --"
+echo "-- 0/6 news (拉取当日热点情报 + 落缓存) --"
 python -m tools.investment_news --save --top 30 > /tmp/stockops_news.$$.log 2>&1 || echo "[warn] news exit non-zero"
-head -12 /tmp/stockops_news.$$.log
+head -8 /tmp/stockops_news.$$.log
 
-echo "-- 1/4 pipeline + alert --"
+echo "-- 1/6 batch pipeline --"
 python -m tools.batch_runner --list core --date "$DATE" || echo "[warn] batch_runner exit non-zero"
 
-echo "-- 2/4 verify (sanity) --"
-python -m tools.verify --tickers 600519.SS,AAPL,000858.SZ --date "$DATE" > /tmp/stockops_verify.$$.log 2>&1 || echo "[warn] verify exit non-zero"
-tail -30 /tmp/stockops_verify.$$.log
+echo "-- 2/6 verify --"
+python -m tools.verify --tickers "$WATCH" --date "$DATE" > /tmp/stockops_verify.$$.log 2>&1 || echo "[warn] verify exit non-zero"
+tail -20 /tmp/stockops_verify.$$.log
 
-echo "-- 3/4 reflect (T-20 回填) --"
+echo "-- 3/6 advise (人类可读建议 + wecom 推送) --"
+./manage.py advise --tickers "$WATCH" --date "$DATE" --equity "$EQUITY" \
+    --output-file /tmp/stockops_advice_$DATE.md \
+    ${NOTIFY:+--notify} || echo "[warn] advise 出错"
+echo "  → /tmp/stockops_advice_$DATE.md"
+
+echo "-- 4/6 rebalance (kelly, dry_run) --"
+./manage.py rebalance --method kelly --days 5 --equity "$EQUITY" > /tmp/stockops_rebal.$$.log 2>&1 || echo "[info] rebalance 空/错误"
+tail -15 /tmp/stockops_rebal.$$.log
+
+echo "-- 5/6 reflect (T-20 学习) --"
 python -m tools.learn --horizon 20 --min-samples 20 --as_of "$DATE" --apply || echo "[info] learn: 空样本或错误"
 
-echo "==[stockops daily] done=="
+echo "-- 6/6 broker + options health --"
+./manage.py broker-health --brokers dry_run,paper
+
+echo "==[stockops daily] done  📄 /tmp/stockops_advice_$DATE.md =="

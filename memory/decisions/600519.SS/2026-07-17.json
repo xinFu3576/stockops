@@ -1,6 +1,6 @@
 {
   "ticker": "600519.SS",
-  "decision_ts": "2026-07-18T09:06:00.888016",
+  "decision_ts": "2026-07-18T09:13:29.035653",
   "decision": {
     "ticker": "600519.SS",
     "as_of": "2026-07-17",
@@ -8,8 +8,8 @@
     "score": 52,
     "confidence": 0.48,
     "entry_price": 1253.0,
-    "stop_loss": null,
-    "take_profit": null,
+    "stop_loss": 1197.006,
+    "take_profit": 1308.994,
     "horizon_days": 20,
     "key_points": [
       "[fundamental] 加权 ROE 10.6%",

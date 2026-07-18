@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.10.0",
-  "description": "StockOps v0.10.0 · options 因子 → sentiment 分析师 + A/B walk-forward+bootstrap + rebalance --execute broker + options 磁盘缓存",
+  "version": "0.11.0",
+  "description": "StockOps v0.11.0 · advise 一站式建议(T+1/T+0) + options 因子化 + A/B Sharpe/MaxDD + 交易成本 + 情报分流 risks/catalysts + daily.sh 全流水线",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {

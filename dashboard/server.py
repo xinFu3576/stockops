@@ -726,36 +726,46 @@ def _ab_sync(params: dict) -> dict:
         pass
 
     def _replay(w: dict) -> dict:
+        import math as _math
         wins = 0; total = 0; ret_sum = 0.0
-        by_analyst = {a: {"w":0,"n":0} for a in ANALYSTS}
+        pnls = []; cum = 0.0; peak = 0.0; maxdd = 0.0
         for r in recs:
             v = r.get("verdicts") or {}
             if not v: continue
-            score = 0.0; tot_w = 0.0
+            score = 0.0
             for name, verd in v.items():
                 if name not in w: continue
                 dir_ = verd.get("direction")
                 if not dir_: continue
-                try:
-                    dir_e = Direction(dir_)
-                except Exception:
-                    continue
-                s = _DIR.get(dir_e, 0.0) * verd.get("confidence", 0.5)
-                score += s * w[name]
-                tot_w += w[name]
+                try: dir_e = Direction(dir_)
+                except Exception: continue
+                score += _DIR.get(dir_e, 0.0) * verd.get("confidence", 0.5) * w[name]
             pred = "buy" if score > 0.05 else ("sell" if score < -0.05 else "hold")
             realized = r.get("realized_return")
             if realized is None: continue
             total += 1
-            # 简化: pred=buy 收 realized，sell 收 -realized，hold 收 0
             pnl = realized if pred == "buy" else (-realized if pred == "sell" else 0)
+            pnls.append(pnl)
             ret_sum += pnl
+            cum += pnl
+            peak = max(peak, cum)
+            maxdd = min(maxdd, cum - peak)
             if pnl > 0: wins += 1
+        # Sharpe (annualized, 假设日频)
+        sharpe = None
+        if len(pnls) >= 3:
+            mean = sum(pnls)/len(pnls)
+            var = sum((p-mean)**2 for p in pnls)/max(1, len(pnls)-1)
+            sd = _math.sqrt(var)
+            if sd > 1e-9:
+                sharpe = round((mean/sd) * _math.sqrt(252), 3)
         return {
             "n": total, "wins": wins,
             "win_rate": round(wins/total, 3) if total else None,
             "total_return": round(ret_sum, 4),
             "avg_return": round(ret_sum/total, 4) if total else None,
+            "sharpe": sharpe,
+            "max_drawdown": round(maxdd, 4),
         }
 
     resA, resB = _replay(wA), _replay(wB)

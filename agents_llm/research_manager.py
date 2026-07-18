@@ -44,7 +44,8 @@ def _stop_take(direction: Direction, entry: float | None, atr: float | None) -> 
         return round(entry - band, 3), round(entry + band * 2, 3)
     if direction in (Direction.SELL, Direction.STRONG_SELL):
         return round(entry + band, 3), round(entry - band * 2, 3)
-    return None, None
+    # HOLD：给参考止损止盈 (±band)
+    return round(entry - band, 3), round(entry + band, 3)
 
 
 def _entry_and_atr(state) -> tuple[float | None, float | None]:
@@ -90,11 +91,19 @@ def _heuristic(state) -> Decision:
                     key_points.append(f"[情报] 全网正面情绪 avg={avg} (n={n})，短线情绪支撑")
                 else:
                     key_points.append(f"[情报] 情绪中性 avg={avg} (n={n})")
-                # top 3 headline 提供证据
+                # top 3 headline 提供证据；正面 → catalysts, 负面 → risks
                 _tk_items = [it for it in _news_items if state.ticker.upper() in [t.upper() for t in it.get("tickers",[])]]
                 for it in sorted(_tk_items, key=lambda x: -abs(x.get("sentiment_score",0)))[:3]:
                     _lbl = it.get("sentiment_label","?")
-                    catalysts.append(f"[{_lbl}] {it.get('title','')[:80]}")
+                    _score = it.get("sentiment_score", 0)
+                    _title = it.get("title","")[:80]
+                    _src = it.get("source","?")
+                    if _score > 0.3:
+                        catalysts.append(f"[{_src}/正面 {_score:+.2f}] {_title}")
+                    elif _score < -0.3:
+                        risks.append(f"[{_src}/负面 {_score:+.2f}] {_title}")
+                    else:
+                        key_points.append(f"[{_src}/{_lbl}] {_title}")
     except Exception as _e:
         pass
     entry, atr = _entry_and_atr(state)

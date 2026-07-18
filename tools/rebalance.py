@@ -183,3 +183,100 @@ def apply_kelly_sizing(orders: list[Order], decisions: dict[str, Decision],
         else:
             out.append(o)
     return out
+
+
+
+# ============== v0.11.0 交易成本 + T+1/T+0 ==============
+
+@dataclass
+class CostModel:
+    """A 股 / 港股 / 美股 三档成本。
+    - CN A 股 (SS/SZ)：印花税 0.05% (卖出)，券商佣金 0.02%~0.05% 双边，最低 5 元
+    - HK 港股：印花税 0.13% 双边，最低 3 港币
+    - US 美股：券商 0 佣金（Robinhood/IB），SEC 费 0.0022% (卖出)
+    - 滑点：默认 5 bps (0.05%)
+    """
+    slippage_bps: float = 5.0
+    cn_stamp: float = 0.0005    # 卖出印花税
+    cn_broker: float = 0.00025  # 双边券商
+    cn_min: float = 5.0
+    hk_stamp: float = 0.0013
+    hk_min_hkd: float = 3.0
+    us_sec: float = 0.000022    # 卖出 SEC 费
+
+
+def estimate_cost(order: Order, cost_model: CostModel | None = None) -> dict:
+    """估算单笔成本。返回 {slippage, commission, stamp, total, total_bps}."""
+    cm = cost_model or CostModel()
+    if not order.price or not order.qty:
+        return {"total": 0.0, "total_bps": 0.0}
+    notional = order.price * order.qty
+    slip = notional * (cm.slippage_bps / 10000)
+    tk = order.ticker.upper()
+    if tk.endswith((".SS", ".SH", ".SZ")):
+        commission = max(cm.cn_min, notional * cm.cn_broker)
+        stamp = notional * cm.cn_stamp if order.side == "sell" else 0
+    elif tk.endswith(".HK"):
+        commission = max(cm.hk_min_hkd, notional * cm.cn_broker)
+        stamp = notional * cm.hk_stamp
+    else:
+        commission = 0
+        stamp = notional * cm.us_sec if order.side == "sell" else 0
+    total = slip + commission + stamp
+    return {
+        "notional": round(notional, 2),
+        "slippage": round(slip, 2),
+        "commission": round(commission, 2),
+        "stamp_and_fees": round(stamp, 2),
+        "total": round(total, 2),
+        "total_bps": round(total / notional * 10000, 2) if notional else 0,
+    }
+
+
+def is_t_plus_1(ticker: str) -> bool:
+    """A 股 T+1；其他 T+0。"""
+    return ticker.upper().endswith((".SS", ".SH", ".SZ"))
+
+
+def can_close_today(position_open_date, ticker: str, today) -> bool:
+    """T+1 判定：A 股当日买入不能当日卖出。"""
+    if not is_t_plus_1(ticker):
+        return True
+    if position_open_date is None: return True
+    try:
+        return today > position_open_date
+    except Exception:
+        return True
+
+
+def filter_orders_by_settlement(orders: list, positions: dict, today=None) -> tuple[list, list]:
+    """T+1 过滤：如果当天买入的 A 股要卖，则拒绝。返回 (allowed, rejected)。"""
+    from datetime import date as _d
+    today = today or _d.today()
+    allowed, rejected = [], []
+    for o in orders:
+        if o.side == "sell" and is_t_plus_1(o.ticker):
+            pos = positions.get(o.ticker)
+            open_date = None
+            if pos and hasattr(pos, "open_date"):
+                open_date = pos.open_date
+            if not can_close_today(open_date, o.ticker, today):
+                rejected.append((o, "T+1: 当日买入不可当日卖出"))
+                continue
+        allowed.append(o)
+    return allowed, rejected
+
+
+def apply_cost_check(plan, cost_model=None, min_edge_bps: float = 10.0):
+    """若单笔成本 > min_edge_bps，直接砍掉该 order 避免磨损。"""
+    kept = []
+    dropped_reasons = []
+    for o in plan.orders:
+        c = estimate_cost(o, cost_model)
+        if c["total_bps"] > min_edge_bps:
+            dropped_reasons.append(f"[{o.ticker}] 成本 {c['total_bps']:.1f}bps > 阈值 {min_edge_bps:.0f}bps, 跳过")
+            continue
+        kept.append(o)
+    plan.orders = kept
+    plan.reasons.extend(dropped_reasons)
+    return plan

@@ -130,8 +130,23 @@ def compute_factors(md: MarketData | None,
         from tools.microstructure import compute_microstructure_bundle
         micro = compute_microstructure_bundle(md)
         for k, v in micro.items():
+            if isinstance(v, str): continue
             if v is not None:
                 add(k, v, "microstructure")
+    except Exception:
+        pass
+
+    # ---- 期权因子(v0.11.0) ----
+    try:
+        from tools.options_chain import fetch_options_skew
+        opt = fetch_options_skew(md.ticker)
+        if opt:
+            if opt.iv_skew is not None:
+                add("iv_skew_real", opt.iv_skew, "options")
+            if opt.put_call_ratio is not None:
+                add("put_call_ratio", opt.put_call_ratio, "options")
+            if opt.atm_call_iv is not None and opt.atm_put_iv is not None:
+                add("atm_iv", (opt.atm_call_iv + opt.atm_put_iv) / 2, "options")
     except Exception:
         pass
 

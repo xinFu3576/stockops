@@ -259,6 +259,145 @@ def cmd_ab(a):
     print(json.dumps(r, ensure_ascii=False, indent=2, default=str))
     return 0
 
+
+
+def cmd_advise(a):
+    """一站式建议：拉数据 → 4 分析师 → 情报 → 决策 → 人类可读买/卖单。
+
+    A 股 T+1 感知；港美股 T+0。
+    """
+    import asyncio, json
+    from datetime import date, datetime
+    from core.orchestrator import run_one
+    from tools.rebalance import is_t_plus_1, estimate_cost, CostModel
+    from tools.options_chain import fetch_options_skew
+    from tools.investment_news import load_latest, aggregate_sentiment
+    from tools.notify import format_notification, notify
+
+    tickers = [t.strip() for t in a.tickers.split(",") if t.strip()]
+    as_of = date.fromisoformat(a.date) if a.date else date.today()
+    equity = a.equity
+
+    async def _run_all():
+        results = []
+        for tk in tickers:
+            st = await run_one(tk, as_of, mode="dry_run", force=True)
+            results.append(st)
+        return results
+
+    states = asyncio.run(_run_all())
+    lines = [f"# 🎯 StockOps 交易建议 · {as_of.isoformat()}", ""]
+    payload_sections = {}
+    for st in states:
+        tk = st.ticker
+        dec = st.decision
+        if dec is None:
+            lines.append(f"## {tk}")
+            lines.append(f"❌ 决策生成失败（数据/分析师异常）")
+            continue
+
+        t_plus = "T+1" if is_t_plus_1(tk) else "T+0"
+        # 生成建议：direction + entry + sl + tp + qty
+        action_map = {
+            "strong_buy": "🚀 **强烈买入**",
+            "buy":        "✅ **买入**",
+            "hold":       "⏸ **持有/观望**",
+            "sell":       "🚫 **卖出**",
+            "strong_sell":"🔻 **强烈卖出**",
+        }
+        act = action_map.get(dec.direction.value, "?")
+
+        # 建议仓位（半 Kelly）
+        from tools.rebalance import _kelly_weight
+        pos_frac = abs(_kelly_weight(dec))
+        pos_notional = equity * pos_frac
+        entry = dec.entry_price or 0
+        sug_qty = 0
+        if entry > 0:
+            sug_qty = int(pos_notional / entry)
+            lot = 100 if tk.upper().endswith((".SS",".SH",".SZ",".HK")) else 1
+            sug_qty = (sug_qty // lot) * lot
+
+        # options 快照
+        try:
+            opt = fetch_options_skew(tk)
+            opt_line = ""
+            if opt and opt.iv_skew is not None:
+                opt_line = f"IV skew={opt.iv_skew:+.4f} ({opt.source})"
+            elif opt and opt.put_call_ratio:
+                opt_line = f"P/C={opt.put_call_ratio:.2f}"
+        except Exception:
+            opt_line = ""
+
+        # sentiment
+        try:
+            snap = load_latest()
+            sent_line = ""
+            if snap:
+                agg = aggregate_sentiment(snap.get("items",[]), tickers=[tk])
+                tk_agg = agg.get(tk.upper()) or agg.get("_MARKET")
+                if tk_agg:
+                    sent_line = f"全网情绪 {tk_agg.get('label')} ({tk_agg.get('avg'):+.3f}, n={tk_agg.get('count')})"
+        except Exception:
+            sent_line = ""
+
+        # 交易成本估算
+        from core.schemas import Order
+        cost_info = ""
+        if entry and sug_qty:
+            side = "buy" if dec.direction.value in ("buy","strong_buy") else                    ("sell" if dec.direction.value in ("sell","strong_sell") else None)
+            if side:
+                o = Order(ticker=tk, side=side, qty=sug_qty, price=entry, order_type="limit")
+                c = estimate_cost(o)
+                cost_info = f"预估成本 ¥{c['total']:.2f} ({c['total_bps']:.1f} bps)"
+
+        lines.append(f"## {tk} · {t_plus}")
+        lines.append(f"{act} · 评分 **{dec.score}/100** · 信心 **{dec.confidence:.0%}**")
+        if entry:
+            lines.append(f"- 建议入场价 **¥{entry}** · 止损 **{dec.stop_loss}** · 止盈 **{dec.take_profit}** · 持有 ~{dec.horizon_days} 天")
+        if sug_qty:
+            lines.append(f"- 建议数量 **{sug_qty}** 股 (半 Kelly, 占用 {pos_frac:.1%} of ¥{equity:,.0f})")
+        if cost_info: lines.append(f"- {cost_info}")
+        if is_t_plus_1(tk):
+            lines.append(f"- ⚠️ **A 股 T+1**：当日买入的股票不能当日卖出")
+        if sent_line: lines.append(f"- {sent_line}")
+        if opt_line:  lines.append(f"- {opt_line}")
+        if dec.key_points:
+            lines.append(f"- **关键点**：")
+            for k in dec.key_points[:5]:
+                lines.append(f"  - {k}")
+        if dec.risks:
+            lines.append(f"- **风险**：")
+            for r in dec.risks[:5]:
+                lines.append(f"  - {r}")
+        if dec.catalysts:
+            lines.append(f"- **催化**：")
+            for c in dec.catalysts[:4]:
+                lines.append(f"  - {c}")
+        lines.append("")
+
+        # 存 payload
+        payload_sections.setdefault("决策", []).append(f"{tk} [{t_plus}] {act} 分{dec.score} 信心{dec.confidence:.0%}")
+        if dec.risks:
+            payload_sections.setdefault("风险", []).extend([f"{tk}: {r[:60]}" for r in dec.risks[:2]])
+        if dec.catalysts:
+            payload_sections.setdefault("催化", []).extend([f"{tk}: {c[:60]}" for c in dec.catalysts[:2]])
+
+    body_md = "\n".join(lines)
+    if a.output_file:
+        pathlib.Path(a.output_file).write_text(body_md, encoding="utf-8")
+        print(f"[advise] 已写入 {a.output_file}")
+    else:
+        print(body_md)
+
+    if a.notify and payload_sections:
+        msg = format_notification(f"交易建议 · {as_of.isoformat()}",
+                                  payload_sections, footer="StockOps 一站式")
+        r = notify(f"交易建议 · {as_of.isoformat()}", msg)
+        print(f"\n[notify] {r}")
+
+    return 0
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -321,6 +460,13 @@ def main():
     p.set_defaults(fn=cmd_rebalance)
     p = sub.add_parser("options-skew"); p.add_argument("--tickers"); p.set_defaults(fn=cmd_options_skew)
     p = sub.add_parser("ab"); p.add_argument("--a"); p.add_argument("--b"); p.add_argument("--days", type=int, default=60); p.set_defaults(fn=cmd_ab)
+    p = sub.add_parser("advise", help="一站式建议：分析 → 买/卖 + 数量 + 止损止盈 (A股T+1, 其他T+0)")
+    p.add_argument("--tickers", required=True, help="逗号分隔 (e.g. 600519.SS,AAPL,0700.HK)")
+    p.add_argument("--date")
+    p.add_argument("--equity", type=float, default=100000.0)
+    p.add_argument("--output-file", "-o")
+    p.add_argument("--notify", action="store_true", help="推送到 wecom/serverchan/feishu/smtp")
+    p.set_defaults(fn=cmd_advise)
     sub.add_parser("test").set_defaults(fn=cmd_test)
     sub.add_parser("status").set_defaults(fn=cmd_status)
 
