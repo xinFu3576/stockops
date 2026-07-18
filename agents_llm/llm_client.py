@@ -107,6 +107,41 @@ class LLMClient:
         self._audit.append({"model": model, "tier": tier, "error": str(last_err)[:120]})
         return None
 
+
+    async def chat(self, tier: str, system: str, user: str,
+                   temperature: float = 0.4, max_tokens: int = 400) -> str | None:
+        """自由文本 chat（非 JSON）。无 key/失败返回 None。"""
+        if not self.enabled:
+            return None
+        model = self._model(tier)
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}",
+                   "Content-Type": "application/json"}
+        for attempt in range(self.retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout, trust_env=True) as c:
+                    r = await c.post(f"{self.base_url}/chat/completions",
+                                     json=payload, headers=headers)
+                    r.raise_for_status()
+                    js = r.json()
+                content = (js["choices"][0]["message"]["content"] or "").strip()
+                self._audit.append({"model": model, "tier": tier,
+                                    "usage": js.get("usage"), "kind": "chat"})
+                return content
+            except (httpx.HTTPError, KeyError) as e:
+                self._audit.append({"model": model, "tier": tier,
+                                    "error": str(e)[:120], "kind": "chat"})
+                import asyncio; await asyncio.sleep(0.4 * (attempt + 1))
+        return None
+
     def audit(self) -> list[dict]:
         return self._audit
 

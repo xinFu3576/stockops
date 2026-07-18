@@ -61,6 +61,11 @@ class PaperBroker:
             new_qty = pos["qty"] + o.qty
             pos["cost"] = (pos["qty"] * pos["cost"] + gross) / new_qty if new_qty else 0
             pos["qty"] = new_qty
+            # T+1 支持：记录每笔 buy 的 open_date（YYYY-MM-DD）
+            today = datetime.now(timezone.utc).date().isoformat()
+            lots = pos.setdefault("lots", [])
+            lots.append({"date": today, "qty": o.qty, "cost": o.price})
+            pos["last_open_date"] = today
         else:  # sell
             pos = st["positions"].get(o.ticker, {"qty": 0, "cost": 0.0})
             if pos["qty"] < o.qty:
@@ -72,6 +77,19 @@ class PaperBroker:
                 return res
             st["cash"] += gross - fee
             pos["qty"] -= o.qty
+            # FIFO 消费 lots
+            remain = o.qty
+            lots = pos.get("lots", [])
+            new_lots = []
+            for lot in lots:
+                if remain <= 0:
+                    new_lots.append(lot); continue
+                if lot["qty"] <= remain:
+                    remain -= lot["qty"]
+                else:
+                    lot = {**lot, "qty": lot["qty"] - remain}; remain = 0
+                    new_lots.append(lot)
+            pos["lots"] = new_lots
             if pos["qty"] == 0:
                 st["positions"].pop(o.ticker, None)
 
@@ -88,6 +106,12 @@ class PaperBroker:
 
     async def cash(self) -> float:
         return _load_state()["cash"]
+
+
+    async def position_open_dates(self) -> dict[str, list[dict]]:
+        """返回 {ticker: [{date, qty, cost}, ...]} 供 T+1 检查。"""
+        st = _load_state()
+        return {tk: p.get("lots", []) for tk, p in st.get("positions", {}).items()}
 
     async def health(self) -> dict:
         try:

@@ -1,6 +1,6 @@
 {
   "ticker": "AAPL",
-  "decision_ts": "2026-07-18T06:03:29.557074",
+  "decision_ts": "2026-07-18T09:33:32.919545",
   "decision": {
     "ticker": "AAPL",
     "as_of": "2026-07-18",
@@ -8,15 +8,16 @@
     "score": 55,
     "confidence": 0.42,
     "entry_price": 333.739990234375,
-    "stop_loss": null,
-    "take_profit": null,
+    "stop_loss": 317.229,
+    "take_profit": 350.251,
     "horizon_days": 20,
     "key_points": [
       "[fundamental] 非 A 股或无 F10 数据，以价格趋势代理",
       "[fundamental] 20 日涨幅 +12.8%",
       "[technical] MA5/MA20=+6.49% 短期上翘",
       "[sentiment] 舆情 +0.00 覆盖 0 条",
-      "[macro_event] 宏观 regime: neutral"
+      "[macro_event] 宏观 regime: neutral",
+      "[情报] 情绪中性 avg=-0.005 (n=442)"
     ],
     "risks": [
       "[fundamental] 未接入财报数据",
@@ -46,7 +47,8 @@
       "macro_event"
     ],
     "used_memory_refs": [
-      "AAPL@2026-07-17"
+      "AAPL@2026-07-17",
+      "AAPL@2026-07-18"
     ]
   },
   "realized_return": null,
