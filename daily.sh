@@ -4,6 +4,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 source .venv/bin/activate
+# 加载本地凭据 (.env.local),不覆盖已有 env
+if [ -f .env.local ]; then set -a; . ./.env.local; set +a; fi
 export ALL_PROXY="${ALL_PROXY:-socks5://127.0.0.1:7890}" \
        HTTPS_PROXY="${HTTPS_PROXY:-socks5://127.0.0.1:7890}" \
        HTTP_PROXY="${HTTP_PROXY:-socks5://127.0.0.1:7890}"

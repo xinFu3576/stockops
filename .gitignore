@@ -11,3 +11,4 @@ reports/
 *.pyc
 .env
 *.bak2
+.env.local

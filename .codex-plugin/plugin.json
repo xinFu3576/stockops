@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.15.1",
-  "description": "StockOps v0.15.1 · fix investment_news 模块级 def 顺序 + kb-archive pathlib import",
+  "version": "0.16.0",
+  "description": "StockOps v0.16.0 · LLM 多提供商 fallback 链 (GPT → DeepSeek-v4-pro → DeepSeek-v4-flash) + .env.local 自动加载",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {

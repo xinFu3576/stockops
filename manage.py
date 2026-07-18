@@ -19,6 +19,20 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+
+# --- .env.local 自动加载 (在 ROOT 里,不覆盖已有 env) ---
+for _envfile in (".env.local", ".env"):
+    _envp = ROOT / _envfile
+    if _envp.exists():
+        for _line in _envp.read_text(encoding="utf-8").splitlines():
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _k, _v = _line.split("=", 1)
+            _k = _k.strip()
+            _v = _v.strip().strip('"').strip("'")
+            if _k and _k not in os.environ:
+                os.environ[_k] = _v
 VENV = ROOT / ".venv" / "bin" / "python"
 PY = str(VENV) if VENV.exists() else sys.executable
 

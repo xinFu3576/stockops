@@ -1,12 +1,16 @@
-"""统一 LLM 客户端 — OpenAI 兼容协议 (含 DeepSeek/Kimi/通义/本地 vLLM)。
+"""统一 LLM 客户端 · 多提供商 fallback 链 (v0.16)
 
-配置 (env)：
-  LLM_BASE_URL      默认 https://api.openai.com/v1
-  LLM_API_KEY       无 key 时全部走启发式兜底 (由调用方处理)
-  DEEP_LLM          深度模型名 (研究经理/辩论/复盘)
-  QUICK_LLM         轻量模型名 (情绪打分/摘要)
-  LLM_MAX_RETRIES   默认 2
-  LLM_TIMEOUT_S     默认 40
+优先级 (第一个 enabled 且未 fail 的胜出):
+  1) primary   → OpenAI GPT     (env: OPENAI_API_KEY 或 LLM_API_KEY，兼容 LLM_BASE_URL)
+  2) fallback1 → 火山方舟 DeepSeek v4 pro   (env: ARK_API_KEY 或 LLM_ARK_KEY)
+  3) fallback2 → 火山方舟 DeepSeek v4 flash (env: ARK_API_KEY 或 LLM_ARK_KEY)
+
+任一 provider 的 structured/chat 调用返回 None 时，自动降级到下一个 provider。
+所有 provider 都失败则返回 None，由调用方走启发式兜底。
+
+兼容旧配置：
+  LLM_PROFILE=openai|deepseek|kimi|qwen|ark|vllm  → 只用该单一 profile
+  LLM_BASE_URL / LLM_API_KEY / DEEP_LLM / QUICK_LLM 仍生效（覆盖 primary）
 """
 from __future__ import annotations
 import json, os, asyncio
@@ -17,7 +21,6 @@ import httpx
 T = TypeVar("T", bound=BaseModel)
 
 
-# 预设 profile:一行切换 LLM 后端
 PROFILES = {
     "openai":    {"base_url": "https://api.openai.com/v1",
                   "deep": "gpt-4o", "quick": "gpt-4o-mini",
@@ -40,21 +43,17 @@ PROFILES = {
 }
 
 
-class LLMClient:
-    def __init__(self):
-        # profile 优先(LLM_PROFILE=ark),显式 LLM_BASE_URL/API_KEY 可覆盖
-        prof_name = os.getenv("LLM_PROFILE", "").lower()
-        prof = PROFILES.get(prof_name, {})
-        self.base_url = (os.getenv("LLM_BASE_URL") or prof.get("base_url",
-                         "https://api.openai.com/v1")).rstrip("/")
-        key_env = prof.get("key_env", "LLM_API_KEY")
-        self.api_key = os.getenv("LLM_API_KEY") or os.getenv(key_env, "")
-        self.deep = os.getenv("DEEP_LLM") or prof.get("deep", "gpt-4o")
-        self.quick = os.getenv("QUICK_LLM") or prof.get("quick", "gpt-4o-mini")
-        self.timeout = float(os.getenv("LLM_TIMEOUT_S", "40"))
-        self.retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
-        self.profile_name = prof_name or "custom"
-        self._audit: list[dict] = []
+class _Provider:
+    """单个 LLM 后端 (base_url + api_key + model names)。"""
+    def __init__(self, name: str, base_url: str, api_key: str,
+                 deep: str, quick: str, timeout: float, retries: int):
+        self.name = name
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.deep = deep
+        self.quick = quick
+        self.timeout = timeout
+        self.retries = retries
 
     @property
     def enabled(self) -> bool:
@@ -63,12 +62,26 @@ class LLMClient:
     def _model(self, tier: str) -> str:
         return self.deep if tier == "deep" else self.quick
 
-    async def structured(self, tier: str, system: str, user: str, schema: Type[T]) -> T | None:
-        """带 pydantic 校验的结构化输出。无 key 或失败返回 None，由上层用启发式兜底。"""
+    async def _post(self, payload: dict) -> dict | None:
+        headers = {"Authorization": f"Bearer {self.api_key}",
+                   "Content-Type": "application/json"}
+        last_err = None
+        for attempt in range(self.retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout, trust_env=True) as c:
+                    r = await c.post(f"{self.base_url}/chat/completions",
+                                     json=payload, headers=headers)
+                    r.raise_for_status()
+                    return r.json()
+            except (httpx.HTTPError, KeyError) as e:
+                last_err = e
+                await asyncio.sleep(0.4 * (attempt + 1))
+        return {"__error__": str(last_err)[:160]}
+
+    async def structured(self, tier, system, user, schema):
         if not self.enabled:
             return None
         model = self._model(tier)
-        # 让模型直接返回 JSON
         schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
         sys_prompt = (
             f"{system}\n\n"
@@ -84,33 +97,16 @@ class LLMClient:
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
         }
-        headers = {"Authorization": f"Bearer {self.api_key}",
-                   "Content-Type": "application/json"}
-        last_err: Exception | None = None
-        for attempt in range(self.retries + 1):
-            try:
-                async with httpx.AsyncClient(timeout=self.timeout, trust_env=True) as c:
-                    r = await c.post(f"{self.base_url}/chat/completions",
-                                     json=payload, headers=headers)
-                    r.raise_for_status()
-                    js = r.json()
-                content = js["choices"][0]["message"]["content"]
-                obj = json.loads(content)
-                validated = schema.model_validate(obj)
-                self._audit.append({"model": model, "tier": tier,
-                                    "usage": js.get("usage")})
-                return validated
-            except (json.JSONDecodeError, ValidationError, httpx.HTTPError, KeyError) as e:
-                last_err = e
-                await asyncio.sleep(0.4 * (attempt + 1))
-        # 记录失败，返回 None 让上层用启发式
-        self._audit.append({"model": model, "tier": tier, "error": str(last_err)[:120]})
-        return None
+        js = await self._post(payload)
+        if not js or js.get("__error__"):
+            return None
+        try:
+            content = js["choices"][0]["message"]["content"]
+            return schema.model_validate(json.loads(content))
+        except (json.JSONDecodeError, ValidationError, KeyError):
+            return None
 
-
-    async def chat(self, tier: str, system: str, user: str,
-                   temperature: float = 0.4, max_tokens: int = 400) -> str | None:
-        """自由文本 chat（非 JSON）。无 key/失败返回 None。"""
+    async def chat(self, tier, system, user, temperature=0.4, max_tokens=400):
         if not self.enabled:
             return None
         model = self._model(tier)
@@ -123,26 +119,114 @@ class LLMClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        headers = {"Authorization": f"Bearer {self.api_key}",
-                   "Content-Type": "application/json"}
-        for attempt in range(self.retries + 1):
-            try:
-                async with httpx.AsyncClient(timeout=self.timeout, trust_env=True) as c:
-                    r = await c.post(f"{self.base_url}/chat/completions",
-                                     json=payload, headers=headers)
-                    r.raise_for_status()
-                    js = r.json()
-                content = (js["choices"][0]["message"]["content"] or "").strip()
-                self._audit.append({"model": model, "tier": tier,
-                                    "usage": js.get("usage"), "kind": "chat"})
-                return content
-            except (httpx.HTTPError, KeyError) as e:
-                self._audit.append({"model": model, "tier": tier,
-                                    "error": str(e)[:120], "kind": "chat"})
-                import asyncio; await asyncio.sleep(0.4 * (attempt + 1))
+        js = await self._post(payload)
+        if not js or js.get("__error__"):
+            return None
+        try:
+            return (js["choices"][0]["message"]["content"] or "").strip()
+        except (KeyError, TypeError):
+            return None
+
+
+class LLMClient:
+    """带 fallback 链的 LLM 门面。"""
+
+    def __init__(self):
+        self.timeout = float(os.getenv("LLM_TIMEOUT_S", "40"))
+        self.retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
+        self._audit: list[dict] = []
+
+        prof_name = os.getenv("LLM_PROFILE", "").lower()
+
+        # --- Primary: OpenAI GPT (被 LLM_PROFILE 强制时改为该 profile) ---
+        primary_profile = PROFILES.get(prof_name) if prof_name else PROFILES["openai"]
+        primary_base = os.getenv("LLM_BASE_URL") or primary_profile["base_url"]
+        primary_key = (os.getenv("LLM_API_KEY")
+                       or os.getenv(primary_profile["key_env"])
+                       or os.getenv("OPENAI_API_KEY", ""))
+        primary_deep = os.getenv("DEEP_LLM") or primary_profile["deep"]
+        primary_quick = os.getenv("QUICK_LLM") or primary_profile["quick"]
+        primary = _Provider(
+            name=prof_name or "openai",
+            base_url=primary_base, api_key=primary_key,
+            deep=primary_deep, quick=primary_quick,
+            timeout=self.timeout, retries=self.retries,
+        )
+
+        providers = [primary]
+
+        # --- Fallback 只在未强制 LLM_PROFILE 时启用 ---
+        if not prof_name:
+            # Fallback 默认走 DeepSeek 官方 API (api.deepseek.com)
+            # 因为 deepseek-v4-pro / deepseek-v4-flash 是 DeepSeek 平台模型；
+            # 若拿到真的方舟 key，可用 LLM_FALLBACK_BASE_URL 覆盖到 ark.cn-beijing.volces.com/api/v3
+            fb_base = os.getenv("LLM_FALLBACK_BASE_URL",
+                                "https://api.deepseek.com/v1")
+            fb_key = (os.getenv("LLM_FALLBACK_KEY")
+                       or os.getenv("DEEPSEEK_API_KEY")
+                       or os.getenv("ARK_API_KEY", ""))
+            fb_deep = os.getenv("FALLBACK_DEEP_MODEL",  "deepseek-v4-pro")
+            fb_flash = os.getenv("FALLBACK_QUICK_MODEL", "deepseek-v4-flash")
+            fb1 = _Provider(
+                name="fallback1-deepseek-v4-pro",
+                base_url=fb_base, api_key=fb_key,
+                deep=fb_deep, quick=fb_deep,
+                timeout=self.timeout, retries=self.retries,
+            )
+            fb2 = _Provider(
+                name="fallback2-deepseek-v4-flash",
+                base_url=fb_base, api_key=fb_key,
+                deep=fb_flash, quick=fb_flash,
+                timeout=self.timeout, retries=self.retries,
+            )
+            providers.extend([fb1, fb2])
+
+        self.providers = providers
+        self.profile_name = prof_name or "chain(gpt->ark-pro->ark-flash)"
+
+        # 向后兼容属性
+        self.base_url = primary.base_url
+        self.api_key = primary.api_key
+        self.deep = primary.deep
+        self.quick = primary.quick
+
+    @property
+    def enabled(self) -> bool:
+        return any(p.enabled for p in self.providers)
+
+    def _model(self, tier):
+        for p in self.providers:
+            if p.enabled:
+                return p._model(tier)
+        return "unknown"
+
+    async def structured(self, tier, system, user, schema):
+        for p in self.providers:
+            if not p.enabled:
+                continue
+            result = await p.structured(tier, system, user, schema)
+            if result is not None:
+                self._audit.append({"provider": p.name, "model": p._model(tier),
+                                    "tier": tier, "ok": True})
+                return result
+            self._audit.append({"provider": p.name, "model": p._model(tier),
+                                "tier": tier, "ok": False, "fallback": True})
         return None
 
-    def audit(self) -> list[dict]:
+    async def chat(self, tier, system, user, temperature=0.4, max_tokens=400):
+        for p in self.providers:
+            if not p.enabled:
+                continue
+            result = await p.chat(tier, system, user, temperature, max_tokens)
+            if result is not None:
+                self._audit.append({"provider": p.name, "model": p._model(tier),
+                                    "tier": tier, "kind": "chat", "ok": True})
+                return result
+            self._audit.append({"provider": p.name, "model": p._model(tier),
+                                "tier": tier, "kind": "chat", "ok": False, "fallback": True})
+        return None
+
+    def audit(self):
         return self._audit
 
 

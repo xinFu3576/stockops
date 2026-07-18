@@ -1,56 +1,31 @@
 {
   "ticker": "AAPL",
-  "decision_ts": "2026-07-18T10:13:16.943600",
+  "decision_ts": "2026-07-18T10:40:28.576857",
   "decision": {
     "ticker": "AAPL",
     "as_of": "2026-07-18",
     "direction": "hold",
-    "score": 54,
-    "confidence": 0.41,
+    "score": 50,
+    "confidence": 0.05,
     "entry_price": 333.739990234375,
     "stop_loss": 317.229,
     "take_profit": 350.251,
     "horizon_days": 20,
     "key_points": [
-      "[fundamental] 非 A 股或无 F10 数据，以价格趋势代理",
-      "[fundamental] 20 日涨幅 +12.8%",
-      "[technical] MA5/MA20=+6.49% 短期上翘",
-      "[sentiment] 舆情 +0.00 覆盖 0 条",
-      "[macro_event] 宏观 regime: neutral",
-      "[portfolio_view] [综合] options / 微结构因子缺失，转由技术+基本面主导",
-      "[情报] 情绪中性 avg=-0.002 (n=442)",
-      "[辩论] 分析师方向存在分歧 (冲突分 37/100)"
+      "[情报] 情绪中性 avg=-0.002 (n=442)"
     ],
     "risks": [
-      "[fundamental] 未接入财报数据",
-      "[technical] RSI=88.6 超买",
-      "[sentiment] 情绪指标滞后于价格",
-      "[macro_event] 宏观数据缺失，关注 CPI/PPI/PMI",
-      "[portfolio_view] [综合] 综合信号中性，参考单因子分析师意见",
       "模型未覆盖极端事件（黑天鹅/停牌/退市）",
       "数据延迟或缺失可能导致信号失真"
     ],
-    "catalysts": [
-      "财报窗口",
-      "行业景气度",
-      "CPI/PPI",
-      "美联储议息",
-      "板块政策",
-      "options 到期日"
-    ],
+    "catalysts": [],
     "checklist": [
       "确认当日为交易日 & 未停牌",
       "确认下单前风控三层通过",
       "确认成本+滑点+印花税已纳入回测口径",
       "确认存在明确止损/止盈价位"
     ],
-    "used_analysts": [
-      "fundamental",
-      "technical",
-      "sentiment",
-      "macro_event",
-      "portfolio_view"
-    ],
+    "used_analysts": [],
     "used_memory_refs": [
       "AAPL@2026-07-17",
       "AAPL@2026-07-18"
