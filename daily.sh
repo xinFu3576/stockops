@@ -11,14 +11,19 @@ export ALL_PROXY="${ALL_PROXY:-socks5://127.0.0.1:7890}" \
 DATE="${1:-$(date +%F)}"
 echo "==[stockops daily] $DATE=="
 
-echo "-- 1/3 pipeline + alert --"
+
+echo "-- 0/4 news (拉取当日热点情报) --"
+python -m tools.investment_news --save --top 30 > /tmp/stockops_news.$$.log 2>&1 || echo "[warn] news exit non-zero"
+head -12 /tmp/stockops_news.$$.log
+
+echo "-- 1/4 pipeline + alert --"
 python -m tools.batch_runner --list core --date "$DATE" || echo "[warn] batch_runner exit non-zero"
 
-echo "-- 2/3 verify (sanity) --"
+echo "-- 2/4 verify (sanity) --"
 python -m tools.verify --tickers 600519.SS,AAPL,000858.SZ --date "$DATE" > /tmp/stockops_verify.$$.log 2>&1 || echo "[warn] verify exit non-zero"
 tail -30 /tmp/stockops_verify.$$.log
 
-echo "-- 3/3 reflect (T-20 回填) --"
+echo "-- 3/4 reflect (T-20 回填) --"
 python -m tools.learn --horizon 20 --min-samples 20 --as_of "$DATE" --apply || echo "[info] learn: 空样本或错误"
 
 echo "==[stockops daily] done=="

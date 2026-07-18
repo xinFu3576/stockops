@@ -109,6 +109,17 @@ def cmd_broker_health(a):
     return 0
 
 
+
+def cmd_news(a):
+    args = ["-m", "tools.investment_news", "--top", str(a.top)]
+    if a.sources: args += ["--sources", a.sources]
+    if a.keywords: args += ["--keywords", a.keywords]
+    if a.tickers: args += ["--tickers", a.tickers]
+    if a.save: args += ["--save"]
+    if a.notify: args += ["--notify"]
+    return _run(*args)
+
+
 def cmd_dashboard(a):
     return _run("-m", "dashboard.server", "--port", str(a.port))
 
@@ -183,6 +194,7 @@ def main():
     sub.add_parser("paper-reset").set_defaults(fn=cmd_paper_reset)
     p = sub.add_parser("dashboard"); p.add_argument("--port", type=int, default=8765); p.set_defaults(fn=cmd_dashboard)
     p = sub.add_parser("broker-health"); p.add_argument("--brokers", default="dry_run,paper,ibkr,futu"); p.set_defaults(fn=cmd_broker_health)
+    p = sub.add_parser("investment-news"); p.add_argument("--sources"); p.add_argument("--keywords"); p.add_argument("--tickers"); p.add_argument("--top",type=int,default=30); p.add_argument("--save",action="store_true"); p.add_argument("--notify",action="store_true"); p.set_defaults(fn=cmd_news)
     sub.add_parser("test").set_defaults(fn=cmd_test)
     sub.add_parser("status").set_defaults(fn=cmd_status)
 

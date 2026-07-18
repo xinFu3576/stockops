@@ -71,7 +71,7 @@ HTML = """<!DOCTYPE html><html><head><meta charset="utf-8">
   .log{max-height:280px;overflow-y:auto}
 </style></head><body>
 <h1>📈 StockOps · 团队仪表盘 <small style="color:#7d8590">v0.6.0</small></h1>
-<div style="margin-bottom:16px"><input id="chartTk" placeholder="600519.SS" size="20"/><button onclick="window.open('/chart/'+encodeURIComponent(document.getElementById('chartTk').value||'AAPL'),'_blank')" style="background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">🕯 打开 K 线</button><input id="cmpTk" placeholder="AAPL,600519.SS,0700.HK" size="30" style="margin-left:16px"/><button onclick="window.open('/compare/'+encodeURIComponent(document.getElementById('cmpTk').value||'AAPL,600519.SS'),'_blank')" style="background:#8957e5;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">📊 网格对比</button><input id="btTk" placeholder="AAPL" size="20" style="margin-left:16px"/><button onclick="window.open('/equity/'+encodeURIComponent(document.getElementById('btTk').value||'AAPL'),'_blank')" style="background:#3fb950;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">📈 回测曲线</button><a href="/pnl" style="margin-left:16px;color:#f0883e">💰 P&L 归因</a></div>
+<div style="margin-bottom:16px"><input id="chartTk" placeholder="600519.SS" size="20"/><button onclick="window.open('/chart/'+encodeURIComponent(document.getElementById('chartTk').value||'AAPL'),'_blank')" style="background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">🕯 打开 K 线</button><input id="cmpTk" placeholder="AAPL,600519.SS,0700.HK" size="30" style="margin-left:16px"/><button onclick="window.open('/compare/'+encodeURIComponent(document.getElementById('cmpTk').value||'AAPL,600519.SS'),'_blank')" style="background:#8957e5;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">📊 网格对比</button><input id="btTk" placeholder="AAPL" size="20" style="margin-left:16px"/><button onclick="window.open('/equity/'+encodeURIComponent(document.getElementById('btTk').value||'AAPL'),'_blank')" style="background:#3fb950;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer;margin-left:8px">📈 回测曲线</button><a href="/pnl" style="margin-left:16px;color:#f0883e">💰 P&L 归因</a><a href="/news" style="margin-left:16px;color:#f0883e">🗞 情报</a></div>
 <div class="grid">
   <div class="card"><h3>项目状态</h3><div id="status"></div></div>
   <div class="card"><h3>因子权重</h3><pre id="weights"></pre></div>
@@ -482,6 +482,110 @@ def _pnl_sync() -> dict:
     }
 
 
+
+NEWS_HTML = """<!DOCTYPE html><html><head><meta charset="utf-8"><title>投资情报</title>
+<style>
+  body{background:#0e1116;color:#e6e6e6;font-family:-apple-system,SF Pro,sans-serif;margin:0;padding:16px}
+  h2{margin:0 0 12px 0;font-size:16px}
+  .bar{margin-bottom:12px}
+  .bar input,.bar select{background:#0d1117;color:#e6e6e6;border:1px solid #30363d;padding:6px 8px;border-radius:4px;margin-right:8px}
+  .bar button{background:#238636;color:#fff;border:0;padding:6px 12px;border-radius:5px;cursor:pointer}
+  .item{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px 14px;margin-bottom:8px}
+  .item .title{font-size:13px;line-height:1.5}
+  .item a{color:#58a6ff;text-decoration:none}
+  .item .meta{font-size:11px;color:#7d8590;margin-top:4px}
+  .tag{display:inline-block;background:#21262d;color:#7ee787;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:6px}
+  .urg{background:#c93c37;color:#fff}
+  .tk{background:#1f6feb;color:#fff}
+  #stats{color:#7d8590;font-size:12px;margin-bottom:12px}
+</style></head><body>
+<h2>🗞 投资情报聚合 <small><a href="/">← 返回</a></small></h2>
+<div class="bar">
+  <input id="kw" placeholder="关键词过滤 (逗号分隔)" size="30"/>
+  <input id="tk" placeholder="ticker (AAPL,600519.SS)" size="25"/>
+  <select id="src">
+    <option value="">全部源</option>
+    <option>sina_7x24</option><option>eastmoney_724</option>
+    <option>yahoo_finance</option><option>sec_edgar</option>
+    <option>fed</option><option>us_treasury</option><option>xinhua</option>
+  </select>
+  <select id="top"><option>50</option><option>100</option><option>200</option></select>
+  <button onclick="load()">🔄 刷新</button>
+</div>
+<div id="stats">加载中...</div>
+<div id="list"></div>
+<script>
+async function load(){
+  const kw = document.getElementById('kw').value;
+  const tk = document.getElementById('tk').value;
+  const src = document.getElementById('src').value;
+  const top = document.getElementById('top').value;
+  const params = new URLSearchParams({top, ...(kw?{kw}:{}), ...(tk?{tk}:{}), ...(src?{src}:{})});
+  const r = await fetch('/api/news?' + params).then(r=>r.json());
+  if(r.error){document.getElementById('stats').textContent='ERROR: '+r.error;return}
+  document.getElementById('stats').innerHTML =
+    `${r.count} 条 · 抓取源分布: ` +
+    Object.entries(r.by_source||{}).map(([k,v])=>`<span class='tag'>${k} ${v}</span>`).join('');
+  const list = document.getElementById('list');
+  list.innerHTML = r.items.map(it => {
+    const tks = (it.tickers||[]).slice(0,5).map(t=>`<span class='tag tk'>${t}</span>`).join('');
+    const tags = (it.tags||[]).map(t=>`<span class='tag'>${t}</span>`).join('');
+    const urg = it.urgency>=0.75 ? `<span class='tag urg'>URGENT ${(it.urgency*100).toFixed(0)}%</span>` : '';
+    const ts = it.ts ? new Date(it.ts).toLocaleString('zh-CN',{hour12:false}) : '';
+    return `<div class="item">
+      <div class="title">${urg}${tks}<a href="${it.url}" target="_blank">${escape(it.title)}</a></div>
+      <div class="meta">[${it.source}] · ${ts} ${tags}</div>
+    </div>`;
+  }).join('');
+}
+function escape(s){return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
+load();
+setInterval(load, 60000);
+</script></body></html>"""
+
+
+def _news_sync(params: dict) -> dict:
+    """dashboard 端点:重跑抓取(或读 cache)+ 过滤 + 打分。"""
+    import asyncio
+    from tools.investment_news import fetch_all, keyword_filter, ticker_filter, _score_urgency, load_latest
+    try:
+        sources = params.get("src", [None])[0]
+        sources = [sources] if sources else None
+        # 优先用 60s 内的 cache,否则重跑
+        cache = load_latest()
+        use_cache = False
+        if cache:
+            try:
+                from datetime import datetime as _dt
+                # cache 是 today 的话直接用
+                if cache.get("as_of") == _dt.today().date().isoformat():
+                    use_cache = True
+            except Exception: pass
+        if use_cache and not sources:
+            items = cache.get("items", [])
+        else:
+            items = asyncio.run(fetch_all(sources))
+        kw = params.get("kw", [None])[0]
+        if kw:
+            items = keyword_filter(items, kw.split(","))
+        tk = params.get("tk", [None])[0]
+        if tk:
+            items = ticker_filter(items, tk.split(","))
+        top = int(params.get("top", ["100"])[0])
+        for it in items:
+            it["urgency"] = _score_urgency(it)
+        items.sort(key=lambda x: -x.get("urgency", 0))
+        items = items[:top]
+        by_source: dict = {}
+        for it in items:
+            s = it.get("source","?")
+            by_source[s] = by_source.get(s, 0) + 1
+        return {"count": len(items), "items": items, "by_source": by_source}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
@@ -566,6 +670,12 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/pnl":
             data = _pnl_sync()
             return self._send(200, json.dumps(data, default=str),
+                              "application/json; charset=utf-8")
+        if u.path == "/news":
+            return self._send(200, NEWS_HTML)
+        if u.path == "/api/news":
+            data = _news_sync(parse_qs(u.query))
+            return self._send(200, json.dumps(data, default=str, ensure_ascii=False).encode("utf-8"),
                               "application/json; charset=utf-8")
         return self._send(404, "not found", "text/plain")
 

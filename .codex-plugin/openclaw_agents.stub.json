@@ -55,7 +55,8 @@
         "stockops-paper",
         "stockops-learn",
         "stockops-dashboard",
-        "stockops-llm"
+        "stockops-llm",
+        "stockops-investment-news"
       ],
       "model": {
         "primary": "openai/gpt-5.5",
@@ -100,7 +101,8 @@
         "stockops-data",
         "source-driven-development",
         "observability-and-instrumentation",
-        "stockops-watch"
+        "stockops-watch",
+        "stockops-investment-news"
       ],
       "model": {
         "primary": "openai/gpt-5.4",
@@ -145,7 +147,8 @@
         "stockops-pipeline",
         "doubt-driven-development",
         "documentation-and-adrs",
-        "stockops-llm"
+        "stockops-llm",
+        "stockops-investment-news"
       ],
       "model": {
         "primary": "openai/gpt-5.5",
@@ -279,7 +282,8 @@
         "incremental-implementation",
         "shipping-and-launch",
         "stockops-batch",
-        "stockops-paper"
+        "stockops-paper",
+        "stockops-investment-news"
       ],
       "model": {
         "primary": "openai/gpt-5.4-mini",
@@ -371,7 +375,8 @@
         "observability-and-instrumentation",
         "healthcheck-audit",
         "stockops-alert",
-        "stockops-dashboard"
+        "stockops-dashboard",
+        "stockops-investment-news"
       ],
       "model": {
         "primary": "openai/gpt-5.4-mini",

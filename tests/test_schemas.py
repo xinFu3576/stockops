@@ -43,3 +43,36 @@ def test_microstructure_bundle():
     assert "ofi_5d" in out and "iv_skew_proxy" in out
     for k, v in out.items():
         assert v is None or -2 <= v <= 2, f"{k}={v} out of sane range"
+
+
+def test_investment_news_normalize_and_dedup():
+    from tools.investment_news import _norm, _hash, _extract_a_tickers, keyword_filter, ticker_filter
+    items = [
+        {"title":"A", "url":"http://x.com/1", "ts":"2026-07-18T10:00:00+00:00", "tags":[]},
+        {"title":"A", "url":"http://x.com/1?utm=abc", "ts":"2026-07-18T09:00:00+00:00", "tags":[]},
+        {"title":"B", "url":"http://y.com/2", "ts":"2026-07-18T11:00:00+00:00", "tags":["policy"]},
+    ]
+    out = _norm(items)
+    assert len(out) == 2
+    # 排序: newer first
+    assert out[0]["title"] == "B"
+
+    # Ticker 抽取
+    assert "600519.SS" in _extract_a_tickers("茅台 600519 涨停")
+    assert "000858.SZ" in _extract_a_tickers("五粮液 000858 传闻")
+
+    # 关键词过滤
+    assert len(keyword_filter([{"title":"降息", "summary":""},{"title":"加班","summary":""}], ["降息"])) == 1
+    # ticker 过滤
+    assert len(ticker_filter([{"tickers":["AAPL"]},{"tickers":["MSFT"]}], ["AAPL"])) == 1
+
+
+def test_notify_wecom_returns_false_when_unset(monkeypatch):
+    """微信渠道未配置时应静默返回 False,不 crash。"""
+    monkeypatch.delenv("WECOM_WEBHOOK", raising=False)
+    monkeypatch.delenv("SERVERCHAN_KEY", raising=False)
+    from tools.notify import send_wecom, send_serverchan, notify
+    assert send_wecom("t","b") is False
+    assert send_serverchan("t","b") is False
+    r = notify("t","b")
+    assert r == {"feishu": False, "wecom": False, "serverchan": False, "smtp": False}

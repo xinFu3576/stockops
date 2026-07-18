@@ -1,7 +1,7 @@
 {
   "name": "stockops",
-  "version": "0.6.0",
-  "description": "StockOps v0.6.0: 8 agents · 17 skills · 4 broker 全真接线 · 6 层数据兜底 · 6 LLM profile · 6 微结构因子(OFI/IV skew/Amihud) · Dashboard 4 视图(K 线+网格对比+回测曲线+P&L 归因) · GitHub Actions 自动 Release + brew bump · 12/12 tests",
+  "version": "0.7.0",
+  "description": "StockOps v0.7.0: 8 agents · 18 skills · 4 broker · 6 层数据兜底 · 6 微结构因子 · 7 源投资情报聚合(new: investment-news) · 4 推送渠道(飞书+企业微信+Server 酱+SMTP) · Dashboard 5 视图(K 线/网格/回测/P&L/情报) · GitHub Actions 自动 Release · brew tap · 14/14 tests",
   "author": "sendy",
   "skills_dir": "skills",
   "python": {
@@ -85,6 +85,11 @@
       "name": "broker-health",
       "cmd": "./manage.py broker-health",
       "description": "诊断 4 家 broker 连通性"
+    },
+    {
+      "name": "investment-news",
+      "cmd": "python -m tools.investment_news",
+      "description": "投资情报聚合(7 源)"
     }
   ],
   "openclaw": {
